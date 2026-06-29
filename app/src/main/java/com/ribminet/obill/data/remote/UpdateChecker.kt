@@ -42,7 +42,9 @@ private data class GitlabReleaseDto(
 object UpdateChecker {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .followRedirects(true)
+        .followSslRedirects(true)
         .build()
     private val gson = Gson()
 
@@ -50,39 +52,57 @@ object UpdateChecker {
     suspend fun fetchLatest(): ReleaseInfo? = withContext(Dispatchers.IO) {
         if (!UpdateConfig.isConfigured) return@withContext null
         try {
-            val builder = Request.Builder()
-                .url(UpdateConfig.latestReleaseApi)
-                .header("Accept", "application/json")
-            if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
-                builder.header("PRIVATE-TOKEN", UpdateConfig.ACCESS_TOKEN)
-            }
-            client.newCall(builder.build()).execute().use { resp ->
-                if (!resp.isSuccessful) return@withContext null
-                val dto = gson.fromJson(resp.body?.string(), GitlabReleaseDto::class.java)
-                    ?: return@withContext null
-                val tag = dto.tagName ?: return@withContext null
-                val version = tag.removePrefix("v").trim()
-                if (version.isBlank()) return@withContext null
-
-                val apkLink = dto.assets?.links?.firstOrNull { link ->
-                    val n = link.name?.endsWith(".apk", ignoreCase = true) == true
-                    val u = link.directAssetUrl?.endsWith(".apk", ignoreCase = true) == true ||
-                        link.url?.endsWith(".apk", ignoreCase = true) == true
-                    n || u
-                }
-                val apkUrl = apkLink?.directAssetUrl ?: apkLink?.url
-                val page = dto.links?.self ?: UpdateConfig.releasesPage
-
-                ReleaseInfo(
-                    versionName = version,
-                    notes = dto.description?.trim().orEmpty(),
-                    downloadUrl = apkUrl ?: page,
-                    pageUrl = page,
-                )
-            }
+            fetchFromUrl(UpdateConfig.latestReleaseApi)
+                ?: fetchLatestFromList()
         } catch (e: Exception) {
             null
         }
+    }
+
+    private fun fetchFromUrl(url: String): ReleaseInfo? {
+        val dto = getReleaseDto(url) ?: return null
+        return dto.toReleaseInfo()
+    }
+
+    private fun fetchLatestFromList(): ReleaseInfo? {
+        val body = getBody(UpdateConfig.releasesApi) ?: return null
+        val list = gson.fromJson(body, Array<GitlabReleaseDto>::class.java) ?: return null
+        return list.firstOrNull()?.toReleaseInfo()
+    }
+
+    private fun getReleaseDto(url: String): GitlabReleaseDto? {
+        val body = getBody(url) ?: return null
+        return gson.fromJson(body, GitlabReleaseDto::class.java)
+    }
+
+    private fun getBody(url: String): String? {
+        val builder = Request.Builder().url(url).header("Accept", "application/json")
+        if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
+            builder.header("PRIVATE-TOKEN", UpdateConfig.ACCESS_TOKEN)
+        }
+        client.newCall(builder.build()).execute().use { resp ->
+            if (!resp.isSuccessful) return null
+            return resp.body?.string()
+        }
+    }
+
+    private fun GitlabReleaseDto.toReleaseInfo(): ReleaseInfo? {
+        val tag = tagName ?: return null
+        val version = tag.removePrefix("v").trim()
+        if (version.isBlank()) return null
+        val apkLink = assets?.links?.firstOrNull { link ->
+            link.name?.endsWith(".apk", ignoreCase = true) == true ||
+                link.directAssetUrl?.contains(".apk", ignoreCase = true) == true ||
+                link.url?.contains(".apk", ignoreCase = true) == true
+        }
+        val apkUrl = apkLink?.directAssetUrl ?: apkLink?.url
+        val page = links?.self ?: UpdateConfig.releasesPage
+        return ReleaseInfo(
+            versionName = version,
+            notes = description?.trim().orEmpty(),
+            downloadUrl = apkUrl ?: page,
+            pageUrl = page,
+        )
     }
 }
 

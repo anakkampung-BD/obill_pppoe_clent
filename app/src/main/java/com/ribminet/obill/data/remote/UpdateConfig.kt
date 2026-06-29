@@ -5,18 +5,12 @@ import java.net.URLEncoder
 /**
  * Konfigurasi auto-deteksi versi rilis terbaru dari GitLab.
  *
- * Repo: https://gitrepo.aks-network.co.id/siribere/obill_pppoe_client
+ * Repo publik: https://gitrepo.aks-network.co.id/siribere/obill_pppoe_client
  *
- * Pengecekan memakai GitLab Releases API:
- *   GET {HOST}/api/v4/projects/{PROJECT_PATH (url-encoded)}/releases/permalink/latest
+ * Pengecekan memakai GitLab Releases API (tanpa token untuk repo publik).
+ * APK diunduh dari asset rilis (Package Registry) lalu dipasang otomatis.
  *
- * Aplikasi membandingkan `tag_name` rilis terbaru (mis. "v3.0.0" / "3.0.0")
- * dengan versi terpasang. Bila lebih baru, APK pada aset rilis diunduh lalu
- * dipasang otomatis.
- *
- * Catatan: bila project bersifat privat, GitLab API perlu token baca.
- * Isi [ACCESS_TOKEN] dengan Personal/Project Access Token (scope: read_api).
- * Untuk project publik, biarkan kosong.
+ * [ACCESS_TOKEN] hanya diisi bila project kembali dijadikan privat.
  */
 object UpdateConfig {
     const val HOST = "https://gitrepo.aks-network.co.id"
@@ -31,6 +25,10 @@ object UpdateConfig {
     /** Endpoint rilis terbaru (permalink/latest). */
     val latestReleaseApi: String
         get() = "$HOST/api/v4/projects/$encodedProject/releases/permalink/latest"
+
+    /** Daftar rilis (fallback bila permalink/latest redirect). */
+    val releasesApi: String
+        get() = "$HOST/api/v4/projects/$encodedProject/releases"
 
     /** Halaman rilis (fallback bila APK tidak ditemukan pada aset). */
     val releasesPage: String
