@@ -1,0 +1,9 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+kotlin.code.style=official
+android.nonTransitiveRClass=true
+
+# Salin file ini menjadi gradle.properties lalu isi kredensial signing release.
+RELEASE_STORE_PASSWORD=your_store_password
+RELEASE_KEY_ALIAS=obill
+RELEASE_KEY_PASSWORD=your_key_password

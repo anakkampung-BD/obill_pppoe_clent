@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="brand_blue">@android:color/transparent</color>
+    <color name="primary_blue">#16ABE3</color>
+    <color name="hero_green">#1FA75A</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+</resources>
