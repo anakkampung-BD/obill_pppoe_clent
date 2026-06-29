@@ -1,5 +1,9 @@
 package com.ribminet.obill.ui.screens
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,8 +21,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.QrCode2
@@ -35,6 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,6 +52,7 @@ import com.ribminet.obill.ui.components.ConfirmRequest
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SecondaryButton
 import com.ribminet.obill.ui.components.AppTextField
+import com.ribminet.obill.ui.components.clickableNoRipple
 import kotlinx.coroutines.delay
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.BrandBlueSurface
@@ -84,6 +90,7 @@ fun PaymentInstructionScreen(
                 Text("Pesanan tidak tersedia.", color = TextSecondary, fontSize = 13.sp)
             }
         }
+        com.ribminet.obill.ui.components.SweetAlertDialog(alert = alert, onConfirm = onDismissAlert)
         return
     }
 
@@ -263,6 +270,7 @@ private data class Quint(
 
 @Composable
 private fun BankCard(bank: String, number: String, owner: String) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -271,12 +279,41 @@ private fun BankCard(bank: String, number: String, owner: String) {
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(Icons.Filled.AccountBalance, contentDescription = null, tint = BrandBlue)
+        val iconKey = when {
+            bank.contains("BCA", ignoreCase = true) -> "bca"
+            bank.contains("DANA", ignoreCase = true) -> "dana"
+            else -> "bank"
+        }
+        com.ribminet.obill.ui.components.PaymentBrandIcon(
+            iconKey = iconKey,
+            fallbackText = "BANK",
+            modifier = Modifier.size(40.dp),
+        )
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(bank, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
             Text(number, color = BrandBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Text("a.n. $owner", color = TextSecondary, fontSize = 12.sp)
+        }
+        val cleanNumber = number.filter { it.isDigit() }
+        if (cleanNumber.isNotBlank()) {
+            Spacer(Modifier.width(8.dp))
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(BrandBlue)
+                    .clickableNoRipple {
+                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                        clipboard.setPrimaryClip(ClipData.newPlainText("Nomor Rekening", cleanNumber))
+                        Toast.makeText(context, "Nomor rekening disalin", Toast.LENGTH_SHORT).show()
+                    }
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.ContentCopy, contentDescription = "Salin", tint = OnAccent, modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Salin", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
         }
     }
 }

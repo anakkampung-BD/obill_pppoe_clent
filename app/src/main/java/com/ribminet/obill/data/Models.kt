@@ -62,6 +62,8 @@ data class PaymentMethodOption(
     val name: String,
     val group: String,
     val short: String,
+    val subtitle: String = "",
+    val iconKey: String = "",
 )
 
 data class BankAccount(

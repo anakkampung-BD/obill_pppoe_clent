@@ -99,21 +99,70 @@ fun PayChannelDto.toPaymentMethodOption(): PaymentMethodOption {
     val group = when (type) {
         "cash" -> "TUNAI"
         "bank_transfer" -> "TRANSFER BANK"
-        "qris", "qr" -> "QRIS / E-WALLET"
+        "qris", "qr" -> "QRIS DANA"
         else -> "LAINNYA"
     }
     val short = when (type) {
         "cash" -> "CASH"
         "bank_transfer" -> "BANK"
-        "qris", "qr" -> "QRIS"
+        "qris", "qr" -> "DANA"
         else -> (method ?: "").uppercase()
     }
+
+    // Untuk transfer bank, tampilkan langsung nama rekening dari server API.
+    val acc = accounts?.firstOrNull()
+    val name: String
+    val subtitle: String
+    val iconKey: String
+    when (type) {
+        "bank_transfer" -> {
+            val banks = accounts?.mapNotNull { it.bank?.takeIf { b -> b.isNotBlank() } }?.distinct().orEmpty()
+            name = banks.joinToString(", ").ifBlank { label ?: "Transfer Bank" }
+            subtitle = when {
+                (accounts?.size ?: 0) > 1 -> "${accounts?.size} rekening tersedia"
+                acc != null -> listOfNotNull(
+                    acc.accountNumber?.takeIf { it.isNotBlank() },
+                    acc.accountName?.takeIf { it.isNotBlank() }?.let { "a.n $it" },
+                ).joinToString("  •  ")
+                else -> ""
+            }
+            iconKey = brandIconKey(banks.firstOrNull() ?: method)
+        }
+        "qris", "qr" -> {
+            name = label ?: "QRIS DANA"
+            subtitle = merchantName?.takeIf { it.isNotBlank() }.orEmpty()
+            iconKey = "dana"
+        }
+        "cash" -> {
+            name = label ?: "Tunai"
+            subtitle = ""
+            iconKey = "cash"
+        }
+        else -> {
+            name = label ?: method ?: "-"
+            subtitle = ""
+            iconKey = brandIconKey(method)
+        }
+    }
+
     return PaymentMethodOption(
         id = method ?: "",
-        name = label ?: method ?: "-",
+        name = name,
         group = group,
         short = short,
+        subtitle = subtitle,
+        iconKey = iconKey,
     )
+}
+
+/** Tentukan ikon brand internal dari nama bank/metode. */
+private fun brandIconKey(raw: String?): String {
+    val v = raw?.lowercase()?.trim() ?: return "bank"
+    return when {
+        v.contains("bca") -> "bca"
+        v.contains("dana") -> "dana"
+        else -> "bank"
+    }
 }
 
 fun PayChannelDto.toBankAccounts(): List<BankAccount> =

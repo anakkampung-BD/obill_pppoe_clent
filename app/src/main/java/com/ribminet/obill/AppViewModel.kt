@@ -58,7 +58,14 @@ class AppViewModel : ViewModel() {
 
     // Notifikasi gaya SweetAlert (login & lainnya)
     var alert by mutableStateOf<AppAlert?>(null)
-    fun dismissAlert() { alert = null }
+    private var alertOnDismiss: (() -> Unit)? = null
+
+    fun dismissAlert() {
+        val cb = alertOnDismiss
+        alertOnDismiss = null
+        alert = null
+        cb?.invoke()
+    }
 
     // ---- Auto-deteksi versi rilis terbaru ----
     var updateInfo by mutableStateOf<ReleaseInfo?>(null)
@@ -672,11 +679,18 @@ class AppViewModel : ViewModel() {
             when (val r = repo.orderCancel(id)) {
                 is ApiResult.Ok -> {
                     currentOrder = null
-                    alert = AppAlert(AlertType.SUCCESS, "Pesanan Dibatalkan", r.data.message ?: "Pesanan telah dibatalkan.")
-                    onSuccess()
+                    billOpenOrder = null
+                    loadBill()
+                    alertOnDismiss = onSuccess
+                    alert = AppAlert(
+                        AlertType.SUCCESS,
+                        "Pesanan Dibatalkan",
+                        "Pesanan pembayaran berhasil dibatalkan.",
+                    )
                 }
                 is ApiResult.Err -> {
                     orderError = r.message
+                    alertOnDismiss = null
                     alert = AppAlert(AlertType.ERROR, "Gagal Membatalkan", r.message)
                 }
             }

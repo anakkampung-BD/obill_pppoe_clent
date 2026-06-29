@@ -197,17 +197,19 @@ private fun MethodRow(method: PaymentMethodOption, selected: Boolean, onClick: (
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(BrandBlueSurface),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(method.short, color = BrandBlue, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        }
+        com.ribminet.obill.ui.components.PaymentBrandIcon(
+            iconKey = method.iconKey,
+            fallbackText = method.short,
+        )
         Spacer(Modifier.width(14.dp))
-        Text(method.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary, modifier = Modifier.weight(1f))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(method.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+            if (method.subtitle.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(method.subtitle, color = TextSecondary, fontSize = 12.sp)
+            }
+        }
+        Spacer(Modifier.width(10.dp))
         RadioDot(selected)
     }
 }
