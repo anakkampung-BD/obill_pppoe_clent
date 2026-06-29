@@ -113,8 +113,16 @@ fun LoginScreen(vm: AppViewModel, onLoggedIn: () -> Unit) {
         }
 
         Spacer(Modifier.height(24.dp))
+        val appVersion = com.ribminet.obill.ObillApp.instance.appVersionName()
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
         Text(
-            "Obill v.3  •  Powered by AKS",
+            "Obill • v.$appVersion • Powered By AKS",
+            color = Color(0xFF2E8A5E),
+            fontSize = 10.sp,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "© $year • All Rights Reserved",
             color = Color(0xFF2E8A5E),
             fontSize = 10.sp,
             modifier = Modifier.padding(bottom = 24.dp)

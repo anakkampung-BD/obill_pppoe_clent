@@ -153,6 +153,11 @@ fun DashboardScreen(
                         )
                     } else {
                         Text(user?.fullName ?: "", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text(
+                            "Obill • v.${com.ribminet.obill.ObillApp.instance.appVersionName()}",
+                            color = OnAccent.copy(alpha = 0.85f),
+                            fontSize = 10.sp,
+                        )
                     }
                 }
             }

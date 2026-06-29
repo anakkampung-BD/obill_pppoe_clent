@@ -216,8 +216,11 @@ fun ProfileScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Obill v.3.0.0", color = TextSecondary, fontSize = 12.sp)
-                    Text("© 2026 Obill Powered by AKS. All Rights Reserved.", color = TextSecondary, fontSize = 11.sp)
+                    val appVersion = com.ribminet.obill.ObillApp.instance.appVersionName()
+                    val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+                    Text("Obill • v.$appVersion • Powered By AKS", color = TextSecondary, fontSize = 10.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text("© $year • All Rights Reserved", color = TextSecondary, fontSize = 10.sp)
                 }
                 Spacer(Modifier.height(16.dp))
             }

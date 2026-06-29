@@ -20,6 +20,7 @@ import com.ribminet.obill.data.remote.DeviceClientDto
 import com.ribminet.obill.data.remote.DeviceDto
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.PayChannelDto
+import com.ribminet.obill.data.remote.formatDateId
 import com.ribminet.obill.data.remote.PendingChangeDto
 import com.ribminet.obill.data.remote.ReleaseInfo
 import com.ribminet.obill.data.remote.UpdateChecker
@@ -231,6 +232,40 @@ class AppViewModel : ViewModel() {
         private set
     fun dismissBillingBanner() { billingBannerVisible = false }
 
+    // Notifikasi internal masa aktif: tampil sekali per sesi saat sisa 1 hari / jatuh tempo.
+    var billingReminder by mutableStateOf<AppAlert?>(null)
+        private set
+    private var billingReminderShown = false
+    fun dismissBillingReminder() { billingReminder = null }
+
+    private fun evaluateBillingReminder() {
+        if (billingReminderShown) return
+        val np = billDto?.nextPayment ?: return
+        val due = billDto?.nextPayment?.dueDate
+        when {
+            np.isOverdue == true -> {
+                billingReminderShown = true
+                billingReminder = AppAlert(
+                    AlertType.ERROR,
+                    "Tagihan Jatuh Tempo",
+                    "Masa aktif layanan Anda telah berakhir" +
+                        (due?.let { " (jatuh tempo ${formatDateId(it)})" } ?: "") +
+                        ". Segera lakukan pembayaran agar layanan tetap aktif.",
+                )
+            }
+            np.daysUntilDue == 1 -> {
+                billingReminderShown = true
+                billingReminder = AppAlert(
+                    AlertType.WARNING,
+                    "Masa Aktif Hampir Habis",
+                    "Masa aktif layanan Anda tersisa 1 hari lagi" +
+                        (due?.let { " (jatuh tempo ${formatDateId(it)})" } ?: "") +
+                        ". Lakukan pembayaran sekarang untuk menghindari isolir.",
+                )
+            }
+        }
+    }
+
     init {
         loadLocalComplaints()
         if (loggedIn) loadInitial()
@@ -336,6 +371,9 @@ class AppViewModel : ViewModel() {
             pendingChange = null
             packagesSource = null
             billingBannerVisible = true
+            billDto = null
+            billingReminder = null
+            billingReminderShown = false
             otpStep = OtpStep.PHONE
             onDone()
         }
@@ -384,6 +422,7 @@ class AppViewModel : ViewModel() {
                 is ApiResult.Ok -> {
                     billDto = r.data.bill
                     billOpenOrder = r.data.openOrder
+                    evaluateBillingReminder()
                 }
                 is ApiResult.Err -> billError = r.message
             }
