@@ -37,7 +37,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ribminet.obill.data.PaymentMethodOption
+import com.ribminet.obill.data.remote.BillDto
+import com.ribminet.obill.data.remote.installationFeeAmount
+import com.ribminet.obill.data.remote.installationFeeLabel
+import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.subscriptionAmount
 import com.ribminet.obill.ui.components.AppTopBar
+import com.ribminet.obill.ui.components.BillAmountBreakdown
 import com.ribminet.obill.ui.components.ConfirmDialog
 import com.ribminet.obill.ui.components.ConfirmRequest
 import com.ribminet.obill.ui.components.PrimaryButton
@@ -54,6 +61,7 @@ import com.ribminet.obill.ui.theme.TextSecondary
 fun PaymentMethodScreen(
     amount: Long,
     packageLabel: String,
+    bill: BillDto? = null,
     methods: List<PaymentMethodOption>,
     loading: Boolean,
     submitting: Boolean,
@@ -99,8 +107,23 @@ fun PaymentMethodScreen(
                         fontWeight = FontWeight.Bold,
                         fontSize = 14.sp
                     )
-                    Spacer(Modifier.height(4.dp))
-                    Text(packageLabel, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                    if (bill != null) {
+                        Spacer(Modifier.height(12.dp))
+                        BillAmountBreakdown(
+                            subscriptionLabel = "Biaya berlangganan — $packageLabel",
+                            subscriptionAmount = bill.subscriptionAmount(),
+                            installationLabel = bill.installationFeeLabel(),
+                            installationAmount = bill.installationFeeAmount(),
+                            latePenaltyAmount = bill.latePenaltyAmount(),
+                            totalAmount = bill.payableTotal(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                        )
+                    } else {
+                        Spacer(Modifier.height(4.dp))
+                        Text(packageLabel, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                    }
                 }
             }
 

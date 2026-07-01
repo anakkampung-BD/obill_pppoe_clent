@@ -18,6 +18,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ribminet.obill.data.local.OnboardingPrefs
+import com.ribminet.obill.push.NotificationHelper
+import com.ribminet.obill.push.OneSignalManager
 import com.ribminet.obill.ui.components.SweetAlertDialog
 import com.ribminet.obill.ui.components.UpdateDialog
 import com.ribminet.obill.ui.navigation.AppNavGraph
@@ -33,15 +35,31 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent { App() }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+    }
 }
 
 private enum class AppStage { SPLASH, PERMISSIONS, READY }
+
+private fun consumeNotificationIntent(intent: Intent?, vm: AppViewModel) {
+    if (intent == null) return
+    val type = intent.getStringExtra(NotificationHelper.EXTRA_NOTIF_TYPE) ?: return
+    val orderId = intent.getIntExtra(NotificationHelper.EXTRA_ORDER_ID, 0).takeIf { it > 0 }
+    vm.handleNotificationIntent(type, orderId)
+    intent.removeExtra(NotificationHelper.EXTRA_NOTIF_TYPE)
+    intent.removeExtra(NotificationHelper.EXTRA_ORDER_ID)
+    intent.removeExtra(NotificationHelper.EXTRA_NOTIF_ID)
+}
 
 @Composable
 fun App() {
     RibmiNetTheme {
         val vm: AppViewModel = viewModel()
         val context = LocalContext.current
+        val activity = context as? MainActivity
         val onboarding = remember { OnboardingPrefs(context) }
 
         var stage by remember { mutableStateOf(AppStage.SPLASH) }
@@ -49,6 +67,12 @@ fun App() {
         LaunchedEffect(Unit) {
             delay(1800)
             stage = if (onboarding.permissionsRequested) AppStage.READY else AppStage.PERMISSIONS
+        }
+
+        LaunchedEffect(stage, activity?.intent) {
+            if (stage == AppStage.READY) {
+                consumeNotificationIntent(activity?.intent, vm)
+            }
         }
 
         when (stage) {
@@ -62,12 +86,17 @@ fun App() {
                 Surface(modifier = Modifier.fillMaxSize(), color = ScreenBackground) {
                     PermissionOnboardingScreen(onDone = {
                         onboarding.permissionsRequested = true
+                        OneSignalManager.requestPushPermission()
                         stage = AppStage.READY
                     })
                 }
                 return@RibmiNetTheme
             }
-            AppStage.READY -> Unit
+            AppStage.READY -> {
+                LaunchedEffect(Unit) {
+                    OneSignalManager.requestPushPermission()
+                }
+            }
         }
 
         LaunchedEffect(Unit) { vm.checkForUpdate() }
@@ -92,9 +121,9 @@ fun App() {
             onDismiss = { vm.dismissUpdate() },
         )
 
-        // Notifikasi internal masa aktif (sekali per sesi). Tunda bila dialog update aktif.
         if (vm.updateInfo == null) {
             SweetAlertDialog(alert = vm.billingReminder) { vm.dismissBillingReminder() }
+            SweetAlertDialog(alert = vm.notificationPopup) { vm.confirmNotificationPopup() }
         }
     }
 }

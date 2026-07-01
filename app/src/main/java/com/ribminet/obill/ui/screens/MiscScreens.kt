@@ -44,7 +44,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.CircularProgressIndicator
+import com.ribminet.obill.data.remote.NotificationDto
+import com.ribminet.obill.data.remote.formatDateId
 import com.ribminet.obill.ui.components.AppTopBar
+import com.ribminet.obill.ui.components.PullToRefresh
 import com.ribminet.obill.ui.components.SecondaryButton
 import com.ribminet.obill.ui.components.clickableNoRipple
 import com.ribminet.obill.ui.theme.BrandBlue
@@ -132,45 +139,90 @@ private fun FaqItem(question: String, answer: String) {
     }
 }
 
-private data class Notif(val title: String, val body: String, val time: String, val icon: ImageVector)
+private fun notificationIcon(type: String?): ImageVector = when (type) {
+    "payment_verified" -> Icons.Filled.Payments
+    "payment_rejected" -> Icons.Filled.Cancel
+    "expiry_reminder_24h" -> Icons.Filled.Schedule
+    "billing_reminder" -> Icons.Filled.Info
+    else -> Icons.Filled.Notifications
+}
 
 @Composable
-fun NotificationsScreen(onBack: () -> Unit) {
-    val notifs = listOf(
-        Notif("Pembayaran Berhasil", "Tagihan Mei 2026 telah lunas sebesar Rp 50.000.", "24 Jun 2026", Icons.Filled.Payments),
-        Notif("Tagihan Baru", "Tagihan bulan Juli 2026 telah terbit. Jatuh tempo 01 Jul 2026.", "01 Jul 2026", Icons.Filled.Info),
-        Notif("Laporan Diterima", "Laporan gangguan internet Anda sedang ditinjau teknisi.", "22 Jun 2026", Icons.AutoMirrored.Filled.HelpOutline),
-    )
+fun NotificationsScreen(
+    notifications: List<NotificationDto>,
+    loading: Boolean,
+    onBack: () -> Unit,
+    onRefresh: () -> Unit,
+    onMarkRead: (Int) -> Unit,
+    onMarkAllRead: () -> Unit,
+) {
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(title = "Notifikasi", onBack = onBack)
-        LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
-            items(notifs) { n ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(CardWhite)
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.Top
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(IconChipBlue),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(n.icon, contentDescription = null, tint = BrandBlue, modifier = Modifier.size(20.dp))
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(n.title, fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
-                        Text(n.body, color = TextSecondary, fontSize = 13.sp)
-                        Spacer(Modifier.height(2.dp))
-                        Text(n.time, color = TextSecondary, fontSize = 11.sp)
+        if (notifications.any { it.isRead != true }) {
+            Text(
+                "Tandai semua dibaca",
+                color = BrandBlue,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickableNoRipple(onMarkAllRead)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+        PullToRefresh(refreshing = loading, onRefresh = onRefresh) {
+            when {
+                loading && notifications.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = BrandBlue)
                     }
                 }
-                Spacer(Modifier.height(10.dp))
+                notifications.isEmpty() -> {
+                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Text("Belum ada notifikasi.", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
+                else -> LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+                    items(notifications, key = { it.id ?: it.hashCode() }) { n ->
+                        val unread = n.isRead != true
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(if (unread) InfoBlueSurface else CardWhite)
+                                .clickableNoRipple { n.id?.let(onMarkRead) }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(IconChipBlue),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    notificationIcon(n.type),
+                                    contentDescription = null,
+                                    tint = BrandBlue,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(n.title ?: "-", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                                Text(n.body ?: "", color = TextSecondary, fontSize = 13.sp)
+                                Spacer(Modifier.height(2.dp))
+                                Text(
+                                    n.createdAt?.let { formatDateId(it) } ?: "",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                    }
+                }
             }
         }
     }

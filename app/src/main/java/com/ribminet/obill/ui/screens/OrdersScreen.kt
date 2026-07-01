@@ -27,6 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.formatDateTimeId
+import com.ribminet.obill.data.remote.orderTypeDisplay
+import com.ribminet.obill.data.remote.payableTotal
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.StatusBadge
@@ -86,8 +88,8 @@ private fun OrderRow(order: OrderDto, onClick: () -> Unit) {
             }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(if (order.orderType == "upgrade") "Upgrade Paket" else "Perpanjang Langganan", color = TextSecondary, fontSize = 12.sp)
-                Text(rupiah(order.amount ?: 0L), fontWeight = FontWeight.Bold, color = BrandBlue, fontSize = 13.sp)
+                Text(order.orderTypeDisplay(), color = TextSecondary, fontSize = 12.sp)
+                Text(rupiah(order.payableTotal()), fontWeight = FontWeight.Bold, color = BrandBlue, fontSize = 13.sp)
             }
             if (!order.createdAt.isNullOrBlank()) {
                 Spacer(Modifier.height(4.dp))

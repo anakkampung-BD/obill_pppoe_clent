@@ -38,6 +38,8 @@ import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -54,6 +56,12 @@ import com.ribminet.obill.data.remote.BillDto
 import com.ribminet.obill.data.remote.DeviceDto
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.formatDateId
+import com.ribminet.obill.data.remote.installationFeeAmount
+import com.ribminet.obill.data.remote.installationFeeLabel
+import com.ribminet.obill.data.remote.isFirstActivation
+import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.subscriptionAmount
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.IconChip
 import com.ribminet.obill.ui.components.IconButtonRound
@@ -99,6 +107,7 @@ fun DashboardScreen(
     onClients: () -> Unit,
     onFiber: () -> Unit,
     onNotifications: () -> Unit,
+    unreadNotifications: Int = 0,
 ) {
     val profileShimmer = user == null
     val billShimmer = bill == null
@@ -163,7 +172,20 @@ fun DashboardScreen(
             }
             Row(modifier = Modifier.align(Alignment.TopEnd)) {
                 IconButtonRound(if (AppThemeState.dark) Icons.Filled.DarkMode else Icons.Filled.LightMode, tint = OnAccent) { AppThemeState.dark = !AppThemeState.dark }
-                IconButtonRound(Icons.Filled.Notifications, tint = OnAccent, onClick = onNotifications)
+                BadgedBox(
+                    badge = {
+                        if (unreadNotifications > 0) {
+                            Badge {
+                                Text(
+                                    if (unreadNotifications > 9) "9+" else unreadNotifications.toString(),
+                                    fontSize = 9.sp,
+                                )
+                            }
+                        }
+                    }
+                ) {
+                    IconButtonRound(Icons.Filled.Notifications, tint = OnAccent, onClick = onNotifications)
+                }
             }
         }
 
@@ -195,7 +217,7 @@ fun DashboardScreen(
                     BillingStatusLoading()
                 } else {
                     BillingStatusCard(
-                        amount = bill?.amount ?: 0L,
+                        bill = bill,
                         dueDate = formatDateId(bill?.nextPayment?.dueDate),
                         isOverdue = bill?.nextPayment?.isOverdue == true,
                         hasOpenOrder = openOrder != null,
@@ -286,7 +308,7 @@ fun DashboardScreen(
 
 @Composable
 private fun BillingStatusCard(
-    amount: Long,
+    bill: BillDto?,
     dueDate: String,
     isOverdue: Boolean,
     hasOpenOrder: Boolean,
@@ -294,6 +316,12 @@ private fun BillingStatusCard(
     onClick: () -> Unit,
     onClose: () -> Unit,
 ) {
+    val total = bill?.payableTotal() ?: 0L
+    val installation = bill?.installationFeeAmount() ?: 0L
+    val subscription = bill?.subscriptionAmount() ?: 0L
+    val penalty = bill?.latePenaltyAmount() ?: 0L
+    val showBreakdown = bill != null && (installation > 0L || penalty > 0L || bill.isFirstActivation())
+    val billData = bill
     val surface: Color
     val accent: Color
     val icon: ImageVector
@@ -329,7 +357,23 @@ private fun BillingStatusCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text("Status Tagihan Kamu", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
-                Text("Total: ${rupiah(amount)}", color = accent, fontWeight = FontWeight.Bold)
+                if (showBreakdown && billData != null) {
+                    if (billData.isFirstActivation()) {
+                        Text("Aktivasi pertama", color = TextSecondary, fontSize = 11.sp)
+                    }
+                    Text("Langganan: ${rupiah(subscription)}", color = TextSecondary, fontSize = 12.sp)
+                    if (installation > 0L) {
+                        Text(
+                            "${billData.installationFeeLabel()}: ${rupiah(installation)}",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                        )
+                    }
+                    if (penalty > 0L) {
+                        Text("Denda: ${rupiah(penalty)}", color = DangerRed, fontSize = 12.sp)
+                    }
+                }
+                Text("Total: ${rupiah(total)}", color = accent, fontWeight = FontWeight.Bold)
                 Text("Jatuh tempo: $dueDate", color = TextSecondary, fontSize = 12.sp)
             }
             StatusBadge(badgeText, accent, OnAccent)

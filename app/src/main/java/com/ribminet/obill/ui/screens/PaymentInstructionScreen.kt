@@ -45,8 +45,15 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.ribminet.obill.data.remote.OrderDto
+import com.ribminet.obill.data.remote.installationFeeAmount
+import com.ribminet.obill.data.remote.installationFeeLabel
+import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.orderTypeDisplay
+import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.subscriptionAmount
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.AppTopBar
+import com.ribminet.obill.ui.components.BillAmountBreakdown
 import com.ribminet.obill.ui.components.ConfirmDialog
 import com.ribminet.obill.ui.components.ConfirmRequest
 import com.ribminet.obill.ui.components.PrimaryButton
@@ -123,10 +130,22 @@ fun PaymentInstructionScreen(
             AppCard {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text(order.orderNo ?: "-", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                    Text(if (order.orderType == "upgrade") "Upgrade" else "Perpanjang", color = TextSecondary, fontSize = 12.sp)
+                    Text(order.orderTypeDisplay(), color = TextSecondary, fontSize = 12.sp)
                 }
                 Spacer(Modifier.height(12.dp))
-                InfoLine("Nominal", rupiah(order.amount ?: 0L), BrandBlue)
+                val amounts = order.amounts
+                if (amounts != null) {
+                    BillAmountBreakdown(
+                        subscriptionLabel = "Biaya berlangganan — ${order.toProfileName ?: "-"}",
+                        subscriptionAmount = order.subscriptionAmount(),
+                        installationLabel = order.installationFeeLabel(),
+                        installationAmount = order.installationFeeAmount(),
+                        latePenaltyAmount = order.latePenaltyAmount(),
+                        totalAmount = order.payableTotal(),
+                    )
+                } else {
+                    InfoLine("Nominal", rupiah(order.payableTotal()), BrandBlue)
+                }
                 InfoLine("Paket", order.toProfileName ?: "-")
                 InfoLine("Metode", instr?.label ?: order.paymentMethod ?: "-")
             }

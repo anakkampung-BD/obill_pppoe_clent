@@ -15,12 +15,19 @@ import com.ribminet.obill.data.PaymentMethodOption
 import com.ribminet.obill.data.UserProfile
 import com.ribminet.obill.data.local.ComplaintStore
 import com.ribminet.obill.data.remote.ApiResult
+import com.ribminet.obill.data.remote.ActivationDto
 import com.ribminet.obill.data.remote.BillDto
 import com.ribminet.obill.data.remote.DeviceClientDto
 import com.ribminet.obill.data.remote.DeviceDto
+import com.ribminet.obill.data.remote.NotificationDto
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.PayChannelDto
+import com.ribminet.obill.data.remote.activationFromFlat
+import com.ribminet.obill.data.remote.activationResolved
 import com.ribminet.obill.data.remote.formatDateId
+import com.ribminet.obill.data.remote.mergeActivationInfo
+import com.ribminet.obill.data.remote.resolvePaymentBill
+import com.ribminet.obill.data.remote.resolvedBill
 import com.ribminet.obill.data.remote.PendingChangeDto
 import com.ribminet.obill.data.remote.ReleaseInfo
 import com.ribminet.obill.data.remote.UpdateChecker
@@ -32,9 +39,17 @@ import com.ribminet.obill.data.remote.toBill
 import com.ribminet.obill.data.remote.toInternetPackage
 import com.ribminet.obill.data.remote.toPaymentMethodOption
 import com.ribminet.obill.data.remote.toUserProfile
+import com.ribminet.obill.push.NotificationHelper
+import com.ribminet.obill.push.NotificationSyncScheduler
+import com.ribminet.obill.push.OneSignalManager
+import com.ribminet.obill.push.ShownNotificationStore
+import com.ribminet.obill.ui.navigation.Routes
 import com.ribminet.obill.util.ApkUpdater
 import com.ribminet.obill.util.ImageUtil
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -142,6 +157,8 @@ class AppViewModel : ViewModel() {
     // ---- Tagihan berjalan ----
     var billDto by mutableStateOf<BillDto?>(null)
         private set
+    var customerActivation by mutableStateOf<com.ribminet.obill.data.remote.ActivationDto?>(null)
+        private set
     var billOpenOrder by mutableStateOf<OrderDto?>(null)
         private set
     var billLoading by mutableStateOf(false)
@@ -238,6 +255,270 @@ class AppViewModel : ViewModel() {
     private var billingReminderShown = false
     fun dismissBillingReminder() { billingReminder = null }
 
+    // ---- Notifikasi (feed + OneSignal) ----
+    val notifications = mutableStateListOf<NotificationDto>()
+    var notificationsLoading by mutableStateOf(false)
+        private set
+    var unreadCount by mutableStateOf(0)
+        private set
+    var pendingPushRoute by mutableStateOf<String?>(null)
+        private set
+    /** Popup in-app (SweetAlert) untuk notifikasi baru saat app dibuka. */
+    var notificationPopup by mutableStateOf<AppAlert?>(null)
+        private set
+    private var notificationPopupRoute: String? = null
+    private val shownNotificationStore = ShownNotificationStore(ObillApp.instance)
+    private var notificationSinceId = repo.tokenStore.notificationSinceId
+    private var notificationPollJob: Job? = null
+    private var lastRegisteredSubscriptionId: String? = null
+    private var pushLinked = false
+
+    fun consumePushRoute(): String? {
+        val r = pendingPushRoute
+        pendingPushRoute = null
+        return r
+    }
+
+    fun dismissNotificationPopup() {
+        notificationPopup = null
+        notificationPopupRoute = null
+    }
+
+    /** Tap "Lihat" pada popup notifikasi → navigasi ke layar terkait. */
+    fun confirmNotificationPopup() {
+        notificationPopupRoute?.let { pendingPushRoute = it }
+        notificationPopup = null
+        notificationPopupRoute = null
+    }
+
+    /** Navigasi dari tap notifikasi sistem (cold start / background). */
+    fun handleNotificationIntent(type: String?, orderId: Int?) {
+        if (type.isNullOrBlank()) return
+        pendingPushRoute = routeForNotificationType(type, orderId)
+        refreshUnreadCount()
+    }
+
+    /** Pasang callback OneSignal (init sudah di [ObillApp.onCreate]). */
+    fun setupOneSignal() {
+        setupOneSignalCallbacks()
+    }
+
+    private fun setupOneSignalCallbacks() {
+        OneSignalManager.setOnSubscriptionChanged { subId ->
+            if (loggedIn) registerPushSubscription(subId)
+        }
+        OneSignalManager.setOnNotificationOpened { data -> handlePushOpened(data) }
+        OneSignalManager.setOnPushReceived { title, body, data ->
+            showNotificationPopup(title, body, data["type"], data["order_id"]?.toIntOrNull())
+            refreshUnreadCount()
+        }
+    }
+
+    /** Hubungkan pelanggan ke OneSignal + daftar subscription ke server. */
+    fun linkPushForCustomer(customerId: Int) {
+        if (customerId <= 0) return
+        repo.tokenStore.customerId = customerId
+        OneSignalManager.login(customerId)
+        pushLinked = true
+        OneSignalManager.currentSubscriptionId()?.let { registerPushSubscription(it) }
+        refreshUnreadCount()
+        startNotificationPoll()
+        NotificationSyncScheduler.schedule(ObillApp.instance)
+    }
+
+    private fun registerPushSubscription(subscriptionId: String) {
+        if (!loggedIn || subscriptionId.isBlank()) return
+        if (subscriptionId == lastRegisteredSubscriptionId) return
+        viewModelScope.launch {
+            when (val r = repo.registerOneSignal(subscriptionId, OneSignalManager.deviceName())) {
+                is ApiResult.Ok -> if (r.data.success) lastRegisteredSubscriptionId = subscriptionId
+                is ApiResult.Err -> Unit
+            }
+        }
+    }
+
+    private fun handlePushOpened(data: Map<String, String>) {
+        pendingPushRoute = routeForNotificationType(data["type"], data["order_id"]?.toIntOrNull())
+        refreshUnreadCount()
+    }
+
+    private fun showNotificationPopup(title: String, body: String, type: String?, orderId: Int?) {
+        notificationPopup = alertForNotification(title, body, type)
+        notificationPopupRoute = routeForNotificationType(type, orderId)
+    }
+
+    private fun alertForNotification(title: String, body: String, type: String?): AppAlert {
+        val alertType = when (type) {
+            "payment_verified" -> AlertType.SUCCESS
+            "payment_rejected", "expiry_reminder_24h" -> AlertType.ERROR
+            "billing_reminder" -> AlertType.WARNING
+            else -> AlertType.INFO
+        }
+        return AppAlert(alertType, title, body, confirmText = "Lihat")
+    }
+
+    private fun alertForNotification(dto: NotificationDto): AppAlert =
+        alertForNotification(dto.title ?: "Notifikasi", dto.body ?: "", dto.type)
+
+    private fun routeForNotificationType(type: String?, orderId: Int?): String = when (type) {
+        "billing_reminder", "expiry_reminder_24h" -> Routes.OUTSTANDING
+        "payment_verified" -> Routes.HISTORY
+        "payment_rejected" -> {
+            orderId?.let { id ->
+                viewModelScope.launch {
+                    when (val r = repo.order(id)) {
+                        is ApiResult.Ok -> r.data.order?.let { currentOrder = it }
+                        is ApiResult.Err -> Unit
+                    }
+                }
+            }
+            if (orderId != null) Routes.PAYMENT_INSTRUCTION else Routes.ORDERS
+        }
+        else -> Routes.NOTIFICATIONS
+    }
+
+    fun startNotificationPoll() {
+        if (!loggedIn) return
+        notificationPollJob?.cancel()
+        notificationPollJob = viewModelScope.launch {
+            while (isActive && loggedIn) {
+                when (val r = repo.notificationsPoll(notificationSinceId, timeout = 25)) {
+                    is ApiResult.Ok -> {
+                        val d = r.data
+                        d.latestId?.let { latest ->
+                            if (latest > notificationSinceId) {
+                                notificationSinceId = latest
+                                repo.tokenStore.notificationSinceId = latest
+                            }
+                        }
+                        d.unreadCount?.let { unreadCount = it }
+                        if (d.hasNew == true && d.notifications.isNotEmpty()) {
+                            processNewNotifications(d.notifications, showInAppPopup = true)
+                        }
+                    }
+                    is ApiResult.Err -> delay(5_000)
+                }
+            }
+        }
+    }
+
+    fun stopNotificationPoll() {
+        notificationPollJob?.cancel()
+        notificationPollJob = null
+    }
+
+    private fun processNewNotifications(incoming: List<NotificationDto>, showInAppPopup: Boolean) {
+        val existing = notifications.mapNotNull { it.id }.toSet()
+        val newOnes = incoming
+            .filter { it.id != null && it.id !in existing }
+            .sortedByDescending { it.id }
+        if (newOnes.isEmpty()) return
+
+        newOnes.forEach { dto ->
+            notifications.add(0, dto)
+            dto.id?.let { id ->
+                if (!shownNotificationStore.isShown(id)) {
+                    NotificationHelper.showFromDto(ObillApp.instance, dto, shownNotificationStore)
+                }
+            }
+        }
+
+        if (showInAppPopup) {
+            notificationPopup = alertForNotification(newOnes.first())
+            notificationPopupRoute = routeForNotificationType(
+                newOnes.first().type,
+                newOnes.first().orderId,
+            )
+        }
+    }
+
+    private fun mergeNotifications(incoming: List<NotificationDto>) {
+        processNewNotifications(incoming, showInAppPopup = true)
+    }
+
+    fun loadNotifications() {
+        notificationsLoading = true
+        viewModelScope.launch {
+            when (val r = repo.notifications(limit = 50)) {
+                is ApiResult.Ok -> {
+                    notifications.clear()
+                    notifications.addAll(r.data.notifications)
+                    r.data.unreadCount?.let { unreadCount = it }
+                    r.data.latestId?.let { latest ->
+                        if (latest > notificationSinceId) {
+                            notificationSinceId = latest
+                            repo.tokenStore.notificationSinceId = latest
+                        }
+                    }
+                }
+                is ApiResult.Err -> Unit
+            }
+            notificationsLoading = false
+        }
+    }
+
+    fun refreshUnreadCount() {
+        if (!loggedIn) return
+        viewModelScope.launch {
+            when (val r = repo.unreadCount()) {
+                is ApiResult.Ok -> {
+                    r.data.unreadCount?.let { unreadCount = it }
+                    r.data.latestId?.let { latest ->
+                        if (latest > notificationSinceId) {
+                            notificationSinceId = latest
+                            repo.tokenStore.notificationSinceId = latest
+                        }
+                    }
+                }
+                is ApiResult.Err -> Unit
+            }
+        }
+    }
+
+    fun markNotificationRead(id: Int) {
+        viewModelScope.launch {
+            when (repo.notificationsRead(id = id)) {
+                is ApiResult.Ok -> {
+                    val idx = notifications.indexOfFirst { it.id == id }
+                    if (idx >= 0) {
+                        val n = notifications[idx]
+                        notifications[idx] = n.copy(isRead = true, readAt = n.readAt ?: "now")
+                    }
+                    refreshUnreadCount()
+                }
+                is ApiResult.Err -> Unit
+            }
+        }
+    }
+
+    fun markAllNotificationsRead() {
+        viewModelScope.launch {
+            when (repo.notificationsRead(all = true)) {
+                is ApiResult.Ok -> {
+                    for (i in notifications.indices) {
+                        notifications[i] = notifications[i].copy(isRead = true)
+                    }
+                    unreadCount = 0
+                }
+                is ApiResult.Err -> Unit
+            }
+        }
+    }
+
+    private fun clearNotificationState() {
+        stopNotificationPoll()
+        NotificationSyncScheduler.cancel(ObillApp.instance)
+        shownNotificationStore.clear()
+        notifications.clear()
+        unreadCount = 0
+        notificationSinceId = 0
+        lastRegisteredSubscriptionId = null
+        pushLinked = false
+        pendingPushRoute = null
+        notificationPopup = null
+        notificationPopupRoute = null
+    }
+
     private fun evaluateBillingReminder() {
         if (billingReminderShown) return
         val np = billDto?.nextPayment ?: return
@@ -268,7 +549,12 @@ class AppViewModel : ViewModel() {
 
     init {
         loadLocalComplaints()
-        if (loggedIn) loadInitial()
+        setupOneSignal()
+        if (loggedIn) {
+            loadInitial()
+            val cid = repo.tokenStore.customerId
+            if (cid > 0) linkPushForCustomer(cid)
+        }
     }
 
     // ---------------- Auth ----------------
@@ -309,7 +595,10 @@ class AppViewModel : ViewModel() {
             when (val r = repo.verifyOtp(phone.trim(), otp.trim())) {
                 is ApiResult.Ok -> {
                     if (r.data.success && !r.data.token.isNullOrBlank()) {
-                        r.data.customer?.let { profile = it.toUserProfile() }
+                        r.data.customer?.let {
+                            profile = it.toUserProfile()
+                            it.id?.let { id -> linkPushForCustomer(id) }
+                        }
                         loggedIn = true
                         loadInitial()
                         onSuccess()
@@ -352,7 +641,13 @@ class AppViewModel : ViewModel() {
 
     fun logout(onDone: () -> Unit) {
         viewModelScope.launch {
-            repo.logout()
+            val subId = OneSignalManager.currentSubscriptionId()
+            if (!subId.isNullOrBlank()) {
+                repo.unregisterOneSignal(subId)
+            }
+            repo.logout(subId)
+            OneSignalManager.logout()
+            clearNotificationState()
             loggedIn = false
             profile = null
             payments.clear()
@@ -372,6 +667,7 @@ class AppViewModel : ViewModel() {
             packagesSource = null
             billingBannerVisible = true
             billDto = null
+            customerActivation = null
             billingReminder = null
             billingReminderShown = false
             otpStep = OtpStep.PHONE
@@ -383,8 +679,12 @@ class AppViewModel : ViewModel() {
     private fun loadInitial() {
         loadLocalComplaints()
         loadMe()
+        loadBill()
         loadPayments()
         loadDevice()
+        loadNotifications()
+        refreshUnreadCount()
+        repo.tokenStore.customerId.takeIf { it > 0 }?.let { if (!pushLinked) linkPushForCustomer(it) }
     }
 
     fun loadMe() {
@@ -392,7 +692,18 @@ class AppViewModel : ViewModel() {
         meLoading = true
         viewModelScope.launch {
             when (val r = repo.me()) {
-                is ApiResult.Ok -> r.data.customer?.let { profile = it.toUserProfile() }
+                is ApiResult.Ok -> {
+                    customerActivation = r.data.activation
+                        ?: r.data.customer?.activationFromFlat()
+                    r.data.customer?.let {
+                        profile = it.toUserProfile()
+                        it.id?.let { id ->
+                            repo.tokenStore.customerId = id
+                            if (loggedIn && !pushLinked) linkPushForCustomer(id)
+                        }
+                    }
+                    billDto = billDto?.let { resolvePaymentBill(it, customerActivation = customerActivation) }
+                }
                 is ApiResult.Err -> meError = r.message
             }
             meLoading = false
@@ -414,17 +725,33 @@ class AppViewModel : ViewModel() {
         }
     }
 
-    fun loadBill() {
+    fun loadBill() = refreshBilling()
+
+    /** Muat tagihan + activation_info (total bayar dari amounts.total_amount, bukan bill.amount). */
+    fun refreshBilling() {
         billError = null
         billLoading = true
         viewModelScope.launch {
-            when (val r = repo.bill()) {
+            val billResult = repo.bill()
+            val activationResult = repo.activationInfo()
+            when (billResult) {
                 is ApiResult.Ok -> {
-                    billDto = r.data.bill
-                    billOpenOrder = r.data.openOrder
+                    var resolved = billResult.data.resolvedBill(customerActivation)
+                    if (activationResult is ApiResult.Ok && activationResult.data.success) {
+                        customerActivation = customerActivation ?: activationResult.data.activationResolved()
+                        resolved = mergeActivationInfo(resolved, activationResult.data)
+                    }
+                    billDto = resolved?.let { resolvePaymentBill(it, customerActivation = customerActivation) }
+                    billOpenOrder = billResult.data.openOrder
                     evaluateBillingReminder()
                 }
-                is ApiResult.Err -> billError = r.message
+                is ApiResult.Err -> {
+                    if (activationResult is ApiResult.Ok && activationResult.data.success) {
+                        customerActivation = customerActivation ?: activationResult.data.activationResolved()
+                        billDto = mergeActivationInfo(billDto, activationResult.data)
+                    }
+                    billError = billResult.message
+                }
             }
             billLoading = false
         }

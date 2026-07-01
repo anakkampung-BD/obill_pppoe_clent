@@ -45,6 +45,24 @@ data class VerifyOtpResp(
 data class MeResp(
     val success: Boolean = false,
     val customer: CustomerDto? = null,
+    val activation: ActivationDto? = null,
+)
+
+data class ActivationDto(
+    @SerializedName("is_first_activation") val isFirstActivation: Boolean? = null,
+    @SerializedName("requires_installation_fee") val requiresInstallationFee: Boolean? = null,
+    @SerializedName("installation_fee_amount") val installationFeeAmount: Long? = null,
+    @SerializedName("installation_fee_label") val installationFeeLabel: String? = null,
+    @SerializedName("payment_count") val paymentCount: Int? = null,
+    val reason: String? = null,
+)
+
+data class BillAmountsDto(
+    @SerializedName("subscription_amount") val subscriptionAmount: Long? = null,
+    @SerializedName("installation_fee_amount") val installationFeeAmount: Long? = null,
+    @SerializedName("installation_fee_label") val installationFeeLabel: String? = null,
+    @SerializedName("late_penalty_amount") val latePenaltyAmount: Long? = null,
+    @SerializedName("total_amount") val totalAmount: Long? = null,
 )
 
 data class CustomerDto(
@@ -68,6 +86,11 @@ data class CustomerDto(
     @SerializedName("time_remaining") val timeRemaining: TimeRemainingDto? = null,
     @SerializedName("time_remaining_display") val timeRemainingDisplay: String? = null,
     @SerializedName("next_payment") val nextPayment: NextPaymentDto? = null,
+    val activation: ActivationDto? = null,
+    @SerializedName("is_first_activation") val isFirstActivationFlat: Boolean? = null,
+    @SerializedName("requires_installation_fee") val requiresInstallationFeeFlat: Boolean? = null,
+    @SerializedName("installation_fee_amount") val installationFeeAmountFlat: Long? = null,
+    @SerializedName("installation_fee_label") val installationFeeLabelFlat: String? = null,
 )
 
 data class TimeRemainingDto(
@@ -126,6 +149,8 @@ data class BillResp(
     val success: Boolean = false,
     val bill: BillDto? = null,
     @SerializedName("open_order") val openOrder: OrderDto? = null,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
 )
 
 data class BillDto(
@@ -138,6 +163,29 @@ data class BillDto(
     @SerializedName("pending_change") val pendingChange: PendingChangeDto? = null,
     @SerializedName("next_payment") val nextPayment: NextPaymentDto? = null,
     @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
+    @SerializedName("total_amount") val totalAmountFlat: Long? = null,
+    @SerializedName("subscription_amount") val subscriptionAmountFlat: Long? = null,
+    @SerializedName("installation_fee_amount") val installationFeeAmountFlat: Long? = null,
+    @SerializedName("installation_fee_label") val installationFeeLabelFlat: String? = null,
+    @SerializedName("late_penalty_amount") val latePenaltyAmountFlat: Long? = null,
+    @SerializedName("is_first_activation") val isFirstActivationFlat: Boolean? = null,
+    @SerializedName("requires_installation_fee") val requiresInstallationFeeFlat: Boolean? = null,
+)
+
+data class ActivationInfoResp(
+    val success: Boolean = false,
+    val message: String? = null,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
+    @SerializedName("total_amount") val totalAmountFlat: Long? = null,
+    @SerializedName("subscription_amount") val subscriptionAmountFlat: Long? = null,
+    @SerializedName("installation_fee_amount") val installationFeeAmountFlat: Long? = null,
+    @SerializedName("installation_fee_label") val installationFeeLabelFlat: String? = null,
+    @SerializedName("late_penalty_amount") val latePenaltyAmountFlat: Long? = null,
+    @SerializedName("is_first_activation") val isFirstActivationFlat: Boolean? = null,
+    @SerializedName("requires_installation_fee") val requiresInstallationFeeFlat: Boolean? = null,
 )
 
 data class PendingChangeDto(
@@ -172,6 +220,16 @@ data class BillPayResp(
     val code: String? = null,
     val order: OrderDto? = null,
     @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
+)
+
+// ---- Denda keterlambatan ----
+data class LatePenaltyResp(
+    val success: Boolean = false,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
+    val message: String? = null,
 )
 
 // ---- Upgrade paket ----
@@ -257,6 +315,7 @@ data class OrderDto(
     val id: Int? = null,
     @SerializedName("order_no") val orderNo: String? = null,
     @SerializedName("order_type") val orderType: String? = null,
+    @SerializedName("order_type_label") val orderTypeLabel: String? = null,
     @SerializedName("from_profile_id") val fromProfileId: Int? = null,
     @SerializedName("from_profile_name") val fromProfileName: String? = null,
     @SerializedName("to_profile_id") val toProfileId: Int? = null,
@@ -274,6 +333,8 @@ data class OrderDto(
     @SerializedName("paid_at") val paidAt: String? = null,
     @SerializedName("processed_at") val processedAt: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
+    val activation: ActivationDto? = null,
+    val amounts: BillAmountsDto? = null,
 )
 
 data class OrderConfirmReq(
@@ -380,4 +441,74 @@ data class ComplaintResp(
     val code: String? = null,
     @SerializedName("photo_sent") val photoSent: Boolean? = null,
     @SerializedName("photo_error") val photoError: String? = null,
+)
+
+// ---- OneSignal & Notifikasi ----
+data class OneSignalConfigResp(
+    val success: Boolean = false,
+    val configured: Boolean? = null,
+    @SerializedName("app_id") val appId: String? = null,
+    @SerializedName("external_user_id_hint") val externalUserIdHint: String? = null,
+)
+
+data class RegisterOneSignalReq(
+    @SerializedName("subscription_id") val subscriptionId: String,
+    val platform: String? = "android",
+    @SerializedName("device_name") val deviceName: String? = null,
+)
+
+data class RegisterOneSignalResp(
+    val success: Boolean = false,
+    val message: String? = null,
+    @SerializedName("device_id") val deviceId: Int? = null,
+    @SerializedName("customer_id") val customerId: Int? = null,
+)
+
+data class UnregisterOneSignalReq(
+    @SerializedName("subscription_id") val subscriptionId: String,
+)
+
+data class LogoutReq(
+    @SerializedName("subscription_id") val subscriptionId: String? = null,
+)
+
+data class NotificationDto(
+    val id: Int? = null,
+    val type: String? = null,
+    val title: String? = null,
+    val body: String? = null,
+    val data: Map<String, Any?>? = null,
+    @SerializedName("order_id") val orderId: Int? = null,
+    @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("read_at") val readAt: String? = null,
+    @SerializedName("is_read") val isRead: Boolean? = null,
+)
+
+data class NotificationsResp(
+    val success: Boolean = false,
+    val count: Int? = null,
+    @SerializedName("unread_count") val unreadCount: Int? = null,
+    @SerializedName("latest_id") val latestId: Int? = null,
+    val notifications: List<NotificationDto> = emptyList(),
+)
+
+data class NotificationsPollResp(
+    val success: Boolean = false,
+    @SerializedName("has_new") val hasNew: Boolean? = null,
+    @SerializedName("latest_id") val latestId: Int? = null,
+    @SerializedName("unread_count") val unreadCount: Int? = null,
+    val count: Int? = null,
+    val notifications: List<NotificationDto> = emptyList(),
+)
+
+data class UnreadCountResp(
+    val success: Boolean = false,
+    @SerializedName("unread_count") val unreadCount: Int? = null,
+    @SerializedName("latest_id") val latestId: Int? = null,
+)
+
+data class NotificationsReadReq(
+    val id: Int? = null,
+    val ids: List<Int>? = null,
+    val all: Boolean? = null,
 )

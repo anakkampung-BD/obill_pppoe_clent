@@ -26,15 +26,54 @@ class CustomerRepository(
             tokenStore.token = result.data.token
             tokenStore.expiresAt = result.data.expiresAt
             tokenStore.phone = phone
+            result.data.customer?.id?.let { tokenStore.customerId = it }
         }
         return result
     }
 
-    suspend fun logout(): ApiResult<BaseResp> {
-        val result = safe { api.logout() }
+    suspend fun logout(subscriptionId: String? = null): ApiResult<BaseResp> {
+        val result = safe { api.logout(LogoutReq(subscriptionId)) }
         tokenStore.clear()
         return result
     }
+
+    suspend fun oneSignalConfig(): ApiResult<OneSignalConfigResp> = safe { api.oneSignalConfig() }
+
+    suspend fun registerOneSignal(
+        subscriptionId: String,
+        deviceName: String? = null,
+    ): ApiResult<RegisterOneSignalResp> = safe {
+        api.registerOneSignal(
+            RegisterOneSignalReq(
+                subscriptionId = subscriptionId,
+                platform = "android",
+                deviceName = deviceName,
+            )
+        )
+    }
+
+    suspend fun unregisterOneSignal(subscriptionId: String): ApiResult<BaseResp> =
+        safe { api.unregisterOneSignal(UnregisterOneSignalReq(subscriptionId)) }
+
+    suspend fun notifications(
+        sinceId: Int? = null,
+        unreadOnly: Boolean = false,
+        limit: Int = 50,
+    ): ApiResult<NotificationsResp> = safe {
+        api.notifications(
+            sinceId = sinceId,
+            unreadOnly = if (unreadOnly) 1 else 0,
+            limit = limit,
+        )
+    }
+
+    suspend fun notificationsPoll(sinceId: Int, timeout: Int = 25): ApiResult<NotificationsPollResp> =
+        safe { api.notificationsPoll(sinceId, timeout) }
+
+    suspend fun unreadCount(): ApiResult<UnreadCountResp> = safe { api.unreadCount() }
+
+    suspend fun notificationsRead(id: Int? = null, ids: List<Int>? = null, all: Boolean = false): ApiResult<BaseResp> =
+        safe { api.notificationsRead(NotificationsReadReq(id = id, ids = ids, all = if (all) true else null)) }
 
     suspend fun me(): ApiResult<MeResp> = safe { api.me() }
 
@@ -123,6 +162,10 @@ class CustomerRepository(
     }
 
     suspend fun bill(): ApiResult<BillResp> = safe { api.bill() }
+
+    suspend fun activationInfo(): ApiResult<ActivationInfoResp> = safe { api.activationInfo() }
+
+    suspend fun latePenalty(): ApiResult<LatePenaltyResp> = safe { api.latePenalty() }
 
     suspend fun billPay(method: String, note: String? = null): ApiResult<BillPayResp> =
         safe { api.billPay(BillPayReq(method, note)) }

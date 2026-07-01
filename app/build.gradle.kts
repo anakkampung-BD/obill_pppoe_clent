@@ -15,8 +15,8 @@ android {
         applicationId = "com.obill.aks"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30002
-        versionName = "3.0.2"
+        versionCode = 30003
+        versionName = "3.0.3"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -48,6 +48,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.14"
@@ -56,6 +57,18 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        force(
+            "org.jetbrains.kotlin:kotlin-stdlib:1.9.24",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.24",
+            "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.24",
+            "com.squareup.okhttp3:okhttp:4.12.0",
+            "com.squareup.okio:okio:3.9.0",
+        )
     }
 }
 
@@ -82,6 +95,15 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+    implementation("com.onesignal:OneSignal:5.6.1")
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-messaging")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+}
+
+// Aktifkan bila google-services.json sudah ada di folder app/
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }

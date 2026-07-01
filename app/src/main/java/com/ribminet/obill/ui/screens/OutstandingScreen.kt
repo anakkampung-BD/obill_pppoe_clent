@@ -30,12 +30,20 @@ import androidx.compose.ui.unit.sp
 import com.ribminet.obill.data.remote.BillDto
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.formatDateId
+import com.ribminet.obill.data.remote.installationFeeAmount
+import com.ribminet.obill.data.remote.installationFeeLabel
+import com.ribminet.obill.data.remote.isFirstActivation
+import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.subscriptionAmount
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.AppTopBar
+import com.ribminet.obill.ui.components.BillAmountBreakdown
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SecondaryButton
 import com.ribminet.obill.ui.components.StatusBadge
 import com.ribminet.obill.ui.theme.BrandBlue
+import com.ribminet.obill.ui.theme.BrandBlueSurface
 import com.ribminet.obill.ui.theme.DangerRed
 import com.ribminet.obill.ui.theme.SuccessGreen
 import com.ribminet.obill.ui.theme.SuccessSurface
@@ -75,6 +83,8 @@ fun OutstandingScreen(
 @Composable
 private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onViewOrder: () -> Unit) {
     val overdue = bill.nextPayment?.isOverdue == true
+    val firstActivation = bill.isFirstActivation()
+    val subscriptionLabel = "Biaya berlangganan — ${bill.profileName ?: "Paket"}"
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -120,6 +130,26 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
             Spacer(Modifier.height(16.dp))
         }
 
+        if (firstActivation) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(BrandBlueSurface)
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Text("Aktivasi Pertama", fontWeight = FontWeight.Bold, color = BrandBlue, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Pembayaran pertama mencakup biaya berlangganan dan biaya instalasi (sekali bayar).",
+                        color = TextSecondary, fontSize = 12.sp
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         AppCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
@@ -135,14 +165,26 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
                 Column(Modifier.weight(1f)) {
                     Text(bill.profileName ?: "Paket", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                     Text(
-                        if (bill.pendingChange?.pending == true) "Paket baru (periode berikutnya)" else "Perpanjang langganan",
+                        when {
+                            firstActivation -> "Aktivasi pertama"
+                            bill.pendingChange?.pending == true -> "Paket baru (periode berikutnya)"
+                            else -> "Perpanjang langganan"
+                        },
                         color = TextSecondary, fontSize = 12.sp
                     )
                 }
                 if (overdue) StatusBadge("Jatuh Tempo", WarningSurface, DangerRed)
             }
             Spacer(Modifier.height(16.dp))
-            InfoRow("Nominal Tagihan", rupiah(bill.amount ?: 0L), valueColor = BrandBlue)
+            BillAmountBreakdown(
+                subscriptionLabel = subscriptionLabel,
+                subscriptionAmount = bill.subscriptionAmount(),
+                installationLabel = bill.installationFeeLabel(),
+                installationAmount = bill.installationFeeAmount(),
+                latePenaltyAmount = bill.latePenaltyAmount(),
+                totalAmount = bill.payableTotal(),
+            )
+            Spacer(Modifier.height(8.dp))
             InfoRow("Jatuh Tempo", formatDateId(bill.nextPayment?.dueDate))
             bill.previewRenewal?.let {
                 InfoRow("Aktif Sampai (Setelah Bayar)", formatDateId(it.newExpiredAt))
@@ -152,7 +194,10 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
 
         Spacer(Modifier.height(20.dp))
         if (openOrder == null) {
-            PrimaryButton(text = "Bayar Tagihan", onClick = onPay)
+            PrimaryButton(
+                text = if (firstActivation) "Bayar Aktivasi" else "Bayar Tagihan",
+                onClick = onPay,
+            )
         }
     }
 }

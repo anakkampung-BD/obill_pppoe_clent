@@ -16,7 +16,35 @@ interface CustomerApi {
     suspend fun verifyOtp(@Body body: VerifyOtpReq): VerifyOtpResp
 
     @POST("api/customer/langganan/logout")
-    suspend fun logout(): BaseResp
+    suspend fun logout(@Body body: LogoutReq = LogoutReq()): BaseResp
+
+    @GET("api/customer/langganan/onesignal_config")
+    suspend fun oneSignalConfig(): OneSignalConfigResp
+
+    @POST("api/customer/langganan/register_onesignal")
+    suspend fun registerOneSignal(@Body body: RegisterOneSignalReq): RegisterOneSignalResp
+
+    @POST("api/customer/langganan/unregister_onesignal")
+    suspend fun unregisterOneSignal(@Body body: UnregisterOneSignalReq): BaseResp
+
+    @GET("api/customer/langganan/notifications")
+    suspend fun notifications(
+        @Query("since_id") sinceId: Int? = null,
+        @Query("unread_only") unreadOnly: Int? = null,
+        @Query("limit") limit: Int = 50,
+    ): NotificationsResp
+
+    @GET("api/customer/langganan/notifications_poll")
+    suspend fun notificationsPoll(
+        @Query("since_id") sinceId: Int,
+        @Query("timeout") timeout: Int = 25,
+    ): NotificationsPollResp
+
+    @GET("api/customer/langganan/unread_count")
+    suspend fun unreadCount(): UnreadCountResp
+
+    @POST("api/customer/langganan/notifications_read")
+    suspend fun notificationsRead(@Body body: NotificationsReadReq): BaseResp
 
     @GET("api/customer/langganan/me")
     suspend fun me(): MeResp
@@ -59,6 +87,12 @@ interface CustomerApi {
 
     @GET("api/customer/langganan/bill")
     suspend fun bill(): BillResp
+
+    @GET("api/customer/langganan/activation_info")
+    suspend fun activationInfo(): ActivationInfoResp
+
+    @GET("api/customer/langganan/late_penalty")
+    suspend fun latePenalty(): LatePenaltyResp
 
     @POST("api/customer/langganan/bill_pay")
     suspend fun billPay(@Body body: BillPayReq): BillPayResp

@@ -4,6 +4,8 @@ import android.app.Application
 import com.ribminet.obill.data.remote.ApiClient
 import com.ribminet.obill.data.remote.CustomerRepository
 import com.ribminet.obill.data.remote.TokenStore
+import com.ribminet.obill.push.OneSignalConfig
+import com.ribminet.obill.push.OneSignalManager
 
 class ObillApp : Application() {
 
@@ -13,6 +15,8 @@ class ObillApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // OneSignal wajib di-init sedini mungkin (sebelum Activity).
+        OneSignalManager.init(this, OneSignalConfig.APP_ID)
         val tokenStore = TokenStore(this)
         val api = ApiClient.create(tokenStore)
         repository = CustomerRepository(api, tokenStore)

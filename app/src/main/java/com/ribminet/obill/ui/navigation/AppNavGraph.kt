@@ -18,6 +18,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.ribminet.obill.AppViewModel
 import com.ribminet.obill.OrderFlow
+import com.ribminet.obill.data.remote.payableTotal
 import com.ribminet.obill.data.ComplaintStatus
 import com.ribminet.obill.data.Complaint
 import com.ribminet.obill.ui.components.AppBottomBar
@@ -48,6 +49,15 @@ fun AppNavGraph(vm: AppViewModel) {
     val nav = rememberNavController()
     val start = if (vm.loggedIn) Routes.HOME else Routes.LOGIN
 
+    LaunchedEffect(vm.loggedIn) {
+        if (vm.loggedIn) vm.startNotificationPoll() else vm.stopNotificationPoll()
+    }
+
+    LaunchedEffect(vm.pendingPushRoute) {
+        val route = vm.consumePushRoute() ?: return@LaunchedEffect
+        nav.navigate(route) { launchSingleTop = true }
+    }
+
     val animDuration = 320
     NavHost(
         navController = nav,
@@ -74,8 +84,8 @@ fun AppNavGraph(vm: AppViewModel) {
         mainTabs(nav, vm)
 
         composable(Routes.OUTSTANDING) {
-            LaunchedEffect(Unit) { vm.startBillFlow(); vm.loadBill() }
-            PullToRefresh(refreshing = vm.billLoading, onRefresh = { vm.loadBill() }) {
+            LaunchedEffect(Unit) { vm.startBillFlow(); vm.refreshBilling() }
+            PullToRefresh(refreshing = vm.billLoading, onRefresh = { vm.refreshBilling() }) {
                 OutstandingScreen(
                     loading = vm.billLoading,
                     error = vm.billError,
@@ -100,12 +110,14 @@ fun AppNavGraph(vm: AppViewModel) {
             val isUpgrade = vm.orderFlow == OrderFlow.UPGRADE
             val amount = if (isUpgrade)
                 vm.packages.firstOrNull { it.id == vm.selectedUpgradeProfileId?.toString() }?.price ?: 0L
-            else vm.billDto?.amount ?: 0L
+            else vm.billDto?.payableTotal() ?: 0L
+            val bill = if (isUpgrade) null else vm.billDto
             val label = if (isUpgrade) vm.selectedUpgradeName else (vm.billDto?.profileName ?: "-")
             PullToRefresh(refreshing = vm.methodsLoading, onRefresh = { vm.loadPaymentMethods() }) {
                 PaymentMethodScreen(
                     amount = amount,
                     packageLabel = label,
+                    bill = bill,
                     methods = vm.methods,
                     loading = vm.methodsLoading,
                     submitting = vm.orderSubmitting,
@@ -237,7 +249,17 @@ fun AppNavGraph(vm: AppViewModel) {
             }
         }
         composable(Routes.HELP) { HelpScreen(onBack = { nav.popBackStack() }) }
-        composable(Routes.NOTIFICATIONS) { NotificationsScreen(onBack = { nav.popBackStack() }) }
+        composable(Routes.NOTIFICATIONS) {
+            LaunchedEffect(Unit) { vm.loadNotifications() }
+            NotificationsScreen(
+                notifications = vm.notifications,
+                loading = vm.notificationsLoading,
+                onBack = { nav.popBackStack() },
+                onRefresh = { vm.loadNotifications() },
+                onMarkRead = { vm.markNotificationRead(it) },
+                onMarkAllRead = { vm.markAllNotificationsRead() },
+            )
+        }
         composable(Routes.TWO_FACTOR) { TwoFactorScreen(onBack = { nav.popBackStack() }) }
         composable(Routes.SIMPLE_DOC) { SimpleDocScreen(title = vm.docTitle, onBack = { nav.popBackStack() }) }
     }
@@ -255,7 +277,7 @@ private fun NavGraphBuilder.mainTabs(nav: NavHostController, vm: AppViewModel) {
     }
 
     composable(Routes.HOME) {
-        LaunchedEffect(Unit) { vm.loadBill(); vm.loadDevice(); vm.loadDeviceClients() }
+        LaunchedEffect(Unit) { vm.loadMe(); vm.refreshBilling(); vm.loadDevice(); vm.loadDeviceClients() }
         val connectedCount = if (vm.deviceClients.isEmpty() && vm.deviceClientsLoading) null else vm.lanClients.size
         val homeRefreshing = vm.meLoading || vm.billLoading || vm.deviceLoading || vm.deviceClientsLoading
         Column(modifier = Modifier.fillMaxSize()) {
@@ -263,7 +285,7 @@ private fun NavGraphBuilder.mainTabs(nav: NavHostController, vm: AppViewModel) {
                 PullToRefresh(
                     refreshing = homeRefreshing,
                     onRefresh = {
-                        vm.loadMe(); vm.loadBill(); vm.loadPayments()
+                        vm.loadMe(); vm.refreshBilling(); vm.loadPayments()
                         vm.loadDevice(); vm.loadDeviceClients()
                     }
                 ) {
@@ -285,6 +307,7 @@ private fun NavGraphBuilder.mainTabs(nav: NavHostController, vm: AppViewModel) {
                         onClients = { nav.navigate(Routes.CLIENT_MONITORING) },
                         onFiber = { nav.navigate(Routes.FIBER_MONITORING) },
                         onNotifications = { nav.navigate(Routes.NOTIFICATIONS) },
+                        unreadNotifications = vm.unreadCount,
                     )
                 }
             }
