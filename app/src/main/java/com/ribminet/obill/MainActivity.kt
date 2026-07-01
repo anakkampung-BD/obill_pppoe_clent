@@ -122,8 +122,12 @@ fun App() {
         )
 
         if (vm.updateInfo == null) {
-            SweetAlertDialog(alert = vm.billingReminder) { vm.dismissBillingReminder() }
-            SweetAlertDialog(alert = vm.notificationPopup) { vm.confirmNotificationPopup() }
+            SweetAlertDialog(alert = vm.billingReminder, onConfirm = { vm.dismissBillingReminder() })
+            SweetAlertDialog(
+                alert = vm.notificationPopup,
+                onConfirm = { vm.confirmNotificationPopup() },
+                onDismiss = { vm.dismissNotificationPopup() },
+            )
         }
     }
 }

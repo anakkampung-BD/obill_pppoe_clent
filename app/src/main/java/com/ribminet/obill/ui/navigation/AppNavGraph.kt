@@ -55,7 +55,8 @@ fun AppNavGraph(vm: AppViewModel) {
 
     LaunchedEffect(vm.pendingPushRoute) {
         val route = vm.consumePushRoute() ?: return@LaunchedEffect
-        nav.navigate(route) { launchSingleTop = true }
+        if (nav.currentBackStackEntry?.destination?.route == route) return@LaunchedEffect
+        nav.navigateToRoute(route)
     }
 
     val animDuration = 320
@@ -267,13 +268,7 @@ fun AppNavGraph(vm: AppViewModel) {
 
 private fun NavGraphBuilder.mainTabs(nav: NavHostController, vm: AppViewModel) {
     val bottomBar: @Composable (String) -> Unit = { current ->
-        AppBottomBar(current = current, onNavigate = { route ->
-            nav.navigate(route) {
-                popUpTo(Routes.HOME) { saveState = true }
-                launchSingleTop = true
-                restoreState = true
-            }
-        })
+        AppBottomBar(current = current, onNavigate = { route -> nav.navigateMainTab(route) })
     }
 
     composable(Routes.HOME) {

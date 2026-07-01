@@ -267,6 +267,7 @@ class AppViewModel : ViewModel() {
     var notificationPopup by mutableStateOf<AppAlert?>(null)
         private set
     private var notificationPopupRoute: String? = null
+    private var pendingPopupNotificationId: Int? = null
     private val shownNotificationStore = ShownNotificationStore(ObillApp.instance)
     private var notificationSinceId = repo.tokenStore.notificationSinceId
     private var notificationPollJob: Job? = null
@@ -282,13 +283,21 @@ class AppViewModel : ViewModel() {
     fun dismissNotificationPopup() {
         notificationPopup = null
         notificationPopupRoute = null
+        pendingPopupNotificationId = null
     }
 
     /** Tap "Lihat" pada popup notifikasi → navigasi ke layar terkait. */
     fun confirmNotificationPopup() {
-        notificationPopupRoute?.let { pendingPushRoute = it }
+        val route = notificationPopupRoute
+        val notifId = pendingPopupNotificationId
         notificationPopup = null
         notificationPopupRoute = null
+        pendingPopupNotificationId = null
+        notifId?.let { id ->
+            shownNotificationStore.markShown(id)
+            markNotificationRead(id)
+        }
+        route?.let { pendingPushRoute = it }
     }
 
     /** Navigasi dari tap notifikasi sistem (cold start / background). */
@@ -309,7 +318,14 @@ class AppViewModel : ViewModel() {
         }
         OneSignalManager.setOnNotificationOpened { data -> handlePushOpened(data) }
         OneSignalManager.setOnPushReceived { title, body, data ->
-            showNotificationPopup(title, body, data["type"], data["order_id"]?.toIntOrNull())
+            offerInAppNotificationPopup(
+                title = title,
+                body = body,
+                type = data["type"],
+                orderId = data["order_id"]?.toIntOrNull(),
+                notificationId = data["notification_id"]?.toIntOrNull()
+                    ?: data["id"]?.toIntOrNull(),
+            )
             refreshUnreadCount()
         }
     }
@@ -342,9 +358,22 @@ class AppViewModel : ViewModel() {
         refreshUnreadCount()
     }
 
-    private fun showNotificationPopup(title: String, body: String, type: String?, orderId: Int?) {
+    private fun offerInAppNotificationPopup(
+        title: String,
+        body: String,
+        type: String?,
+        orderId: Int?,
+        notificationId: Int?,
+    ) {
+        if (notificationPopup != null) return
+        if (notificationId != null && shownNotificationStore.isShown(notificationId)) return
         notificationPopup = alertForNotification(title, body, type)
         notificationPopupRoute = routeForNotificationType(type, orderId)
+        pendingPopupNotificationId = notificationId
+    }
+
+    private fun showNotificationPopup(title: String, body: String, type: String?, orderId: Int?) {
+        offerInAppNotificationPopup(title, body, type, orderId, notificationId = null)
     }
 
     private fun alertForNotification(title: String, body: String, type: String?): AppAlert {
@@ -424,11 +453,13 @@ class AppViewModel : ViewModel() {
         }
 
         if (showInAppPopup) {
-            notificationPopup = alertForNotification(newOnes.first())
-            notificationPopupRoute = routeForNotificationType(
-                newOnes.first().type,
-                newOnes.first().orderId,
-            )
+            val first = newOnes.first()
+            val id = first.id
+            if (notificationPopup != null) return
+            if (id != null && shownNotificationStore.isShown(id)) return
+            notificationPopup = alertForNotification(first)
+            notificationPopupRoute = routeForNotificationType(first.type, first.orderId)
+            pendingPopupNotificationId = id
         }
     }
 
@@ -517,6 +548,7 @@ class AppViewModel : ViewModel() {
         pendingPushRoute = null
         notificationPopup = null
         notificationPopupRoute = null
+        pendingPopupNotificationId = null
     }
 
     private fun evaluateBillingReminder() {

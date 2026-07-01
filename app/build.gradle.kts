@@ -15,8 +15,8 @@ android {
         applicationId = "com.obill.aks"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30003
-        versionName = "3.0.3"
+        versionCode = 30004
+        versionName = "3.0.4"
         vectorDrawables { useSupportLibrary = true }
     }
 

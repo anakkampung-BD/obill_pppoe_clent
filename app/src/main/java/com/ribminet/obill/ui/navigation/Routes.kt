@@ -7,6 +7,8 @@ object Routes {
     const val REPORT = "report"
     const val PROFILE = "profile"
 
+    val MAIN_TABS = setOf(HOME, HISTORY, REPORT, PROFILE)
+
     const val OUTSTANDING = "outstanding"
     const val PAYMENT_METHOD = "payment_method"
     const val PAYMENT_CONFIRM = "payment_confirm"

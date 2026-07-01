@@ -46,6 +46,15 @@ import com.ribminet.obill.ui.theme.WarningOrange
 
 @Composable
 fun SweetAlertDialog(alert: AppAlert?, onConfirm: () -> Unit) {
+    SweetAlertDialog(alert, onConfirm, onDismiss = onConfirm)
+}
+
+@Composable
+fun SweetAlertDialog(
+    alert: AppAlert?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
     if (alert == null) return
 
     val color = when (alert.type) {
@@ -64,7 +73,7 @@ fun SweetAlertDialog(alert: AppAlert?, onConfirm: () -> Unit) {
     val scale = remember { Animatable(0.7f) }
     LaunchedEffect(alert) { scale.snapTo(0.7f); scale.animateTo(1f) }
 
-    Dialog(onDismissRequest = onConfirm) {
+    Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
                 .scale(scale.value)
