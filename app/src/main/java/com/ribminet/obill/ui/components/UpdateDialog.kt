@@ -138,7 +138,7 @@ fun UpdateDialog(
                         .clip(RoundedCornerShape(12.dp))
                         .background(BrandBlue)
                         .clickableNoRipple { onUpdate(info) }
-                        .padding(vertical = 13.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text("Perbarui Sekarang", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)

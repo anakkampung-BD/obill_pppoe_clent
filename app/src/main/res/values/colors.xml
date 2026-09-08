@@ -5,4 +5,5 @@
     <color name="hero_green">#1FA75A</color>
     <color name="white">#FFFFFFFF</color>
     <color name="black">#FF000000</color>
+    <color name="splash_background">#F2F7FB</color>
 </resources>

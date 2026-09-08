@@ -88,7 +88,6 @@ fun ChangePasswordScreen(onBack: () -> Unit, onSave: () -> Unit) {
             AppTextField(confirm, { confirm = it }, "Konfirmasi Kata Sandi Baru", leadingIcon = Icons.Filled.VerifiedUser, isPassword = true)
         }
         Column(modifier = Modifier
-            .background(ScreenBackground)
             .padding(16.dp)) {
             PrimaryButton(text = "Simpan Kata Sandi Baru", enabled = allValid, onClick = onSave)
         }

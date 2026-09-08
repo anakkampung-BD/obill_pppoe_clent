@@ -13,8 +13,11 @@ import com.ribminet.obill.data.DummyData
 import com.ribminet.obill.data.InternetPackage
 import com.ribminet.obill.data.PaymentMethodOption
 import com.ribminet.obill.data.UserProfile
+import com.ribminet.obill.data.local.AnnouncementPrefs
+import com.ribminet.obill.data.local.BillPaymentPrefs
 import com.ribminet.obill.data.local.ComplaintStore
 import com.ribminet.obill.data.remote.ApiResult
+import com.ribminet.obill.data.remote.AnnouncementDto
 import com.ribminet.obill.data.remote.ActivationDto
 import com.ribminet.obill.data.remote.BillDto
 import com.ribminet.obill.data.remote.DeviceClientDto
@@ -22,12 +25,20 @@ import com.ribminet.obill.data.remote.DeviceDto
 import com.ribminet.obill.data.remote.NotificationDto
 import com.ribminet.obill.data.remote.OrderDto
 import com.ribminet.obill.data.remote.PayChannelDto
+import com.ribminet.obill.data.remote.WalletPaymentDto
 import com.ribminet.obill.data.remote.activationFromFlat
 import com.ribminet.obill.data.remote.activationResolved
+import com.ribminet.obill.data.remote.dueDisplay
 import com.ribminet.obill.data.remote.formatDateId
+import com.ribminet.obill.data.remote.disconnectDisplay
+import com.ribminet.obill.data.remote.shouldShowDisconnectHint
+import com.ribminet.obill.data.remote.enrichedFromPayResp
+import com.ribminet.obill.data.remote.isQrisDinamisPayment
 import com.ribminet.obill.data.remote.mergeActivationInfo
 import com.ribminet.obill.data.remote.resolvePaymentBill
 import com.ribminet.obill.data.remote.resolvedBill
+import com.ribminet.obill.data.remote.sortedForDisplay
+import com.ribminet.obill.data.remote.withMergedPayment
 import com.ribminet.obill.data.remote.PendingChangeDto
 import com.ribminet.obill.data.remote.ReleaseInfo
 import com.ribminet.obill.data.remote.UpdateChecker
@@ -35,19 +46,25 @@ import com.ribminet.obill.data.remote.UpdateConfig
 import com.ribminet.obill.data.remote.VersionUtil
 import com.ribminet.obill.data.remote.RxPointDto
 import com.ribminet.obill.data.remote.RxSummaryDto
+import com.ribminet.obill.data.remote.UnifiedHistoryItem
 import com.ribminet.obill.data.remote.toBill
 import com.ribminet.obill.data.remote.toInternetPackage
 import com.ribminet.obill.data.remote.toPaymentMethodOption
+import com.ribminet.obill.data.remote.toUnifiedHistoryItem
 import com.ribminet.obill.data.remote.toUserProfile
 import com.ribminet.obill.push.NotificationHelper
 import com.ribminet.obill.push.NotificationSyncScheduler
 import com.ribminet.obill.push.OneSignalManager
 import com.ribminet.obill.push.ShownNotificationStore
+import com.ribminet.obill.ui.guide.GuideSession
+import com.ribminet.obill.ui.guide.UserGuides
 import com.ribminet.obill.ui.navigation.Routes
 import com.ribminet.obill.util.ApkUpdater
 import com.ribminet.obill.util.ImageUtil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -140,6 +157,212 @@ class AppViewModel : ViewModel() {
 
     fun dismissUpdate() { updateInfo = null }
 
+    // ---- Pengumuman admin (popup full + kartu beranda) ----
+    private val announcementPrefs = AnnouncementPrefs(ObillApp.instance)
+    private var announcementsFetchedAtMs = 0L
+    private val announcementsCacheMs = 10 * 60 * 1000L
+    /** Modal pengumuman (slider) sedang tampil. */
+    var announcementModalVisible by mutableStateOf(false)
+        private set
+    /** ID item awal saat dibuka dari kartu beranda (opsional). */
+    var announcementModalStartId by mutableStateOf<String?>(null)
+        private set
+    /** Daftar pengumuman untuk kartu/slider beranda & modal. */
+    val announcements = mutableStateListOf<AnnouncementDto>()
+    var announcementsLoading by mutableStateOf(false)
+        private set
+    /** Lock UI tombol Sudah Baca saat POST announcement_read. */
+    var announcementMarkingRead by mutableStateOf(false)
+        private set
+
+    /** Buka modal dari kartu beranda — abaikan snooze; tampilkan semua item. */
+    fun openAnnouncementDetail(start: AnnouncementDto? = null) {
+        if (announcements.isEmpty()) return
+        announcementModalStartId = start?.resolvedId()
+            ?: announcements.firstOrNull { !it.markedRead() }?.resolvedId()
+            ?: announcements.first().resolvedId()
+        announcementModalVisible = true
+    }
+
+    /** Set daftar pengumuman; buka modal jika ada yang belum dibaca dan belum di-snooze. */
+    fun setAnnouncements(items: List<AnnouncementDto>) {
+        val localRead = announcementPrefs.readIds()
+        val sorted = items.sortedForDisplay().map { item ->
+            val id = item.resolvedId()
+            if (item.markedRead() || localRead.contains(id)) {
+                item.copy(isRead = true)
+            } else {
+                item
+            }
+        }
+        announcements.clear()
+        announcements.addAll(sorted)
+        if (sorted.isEmpty()) {
+            announcementModalVisible = false
+            announcementModalStartId = null
+            return
+        }
+        val hasUnread = sorted.any { !it.markedRead() }
+        // Auto-popup hanya untuk unread + hormati snooze. Buka dari beranda abaikan snooze.
+        if (!hasUnread) return
+        if (!announcementModalVisible && !announcementPrefs.isModalSnoozed()) {
+            announcementModalStartId = sorted.first { !it.markedRead() }.resolvedId()
+            announcementModalVisible = true
+        }
+    }
+
+    /** Close: tutup popup tanpa snooze (bisa muncul lagi nanti). */
+    fun dismissAnnouncement() {
+        announcementModalVisible = false
+        announcementModalStartId = null
+    }
+
+    /**
+     * Sudah Baca: POST view-counter ke server (idempotent), update lokal.
+     * Tutup + snooze 24 jam hanya jika semua item sudah dibaca.
+     */
+    fun markAnnouncementRead(item: AnnouncementDto) {
+        if (announcementMarkingRead) return
+        if (item.markedRead()) {
+            finishAnnouncementReadIfDone()
+            return
+        }
+        val announcementId = item.id
+        if (announcementId == null) {
+            applyAnnouncementReadLocal(item, readCount = item.readCount)
+            finishAnnouncementReadIfDone()
+            return
+        }
+        announcementMarkingRead = true
+        viewModelScope.launch {
+            val readerKey = repo.tokenStore.customerId.takeIf { it > 0 }?.toString()
+            val readerName = profile?.fullName?.takeIf { it.isNotBlank() }
+                ?: repo.tokenStore.phone?.takeIf { it.isNotBlank() }
+            when (val r = repo.announcementRead(announcementId, readerKey, readerName)) {
+                is ApiResult.Ok -> {
+                    val data = r.data
+                    if (data.success || data.isRead == true || data.alreadyRead == true) {
+                        applyAnnouncementReadLocal(
+                            item,
+                            readCount = data.readCount ?: item.readCount,
+                        )
+                        finishAnnouncementReadIfDone()
+                    } else {
+                        alert = AppAlert(
+                            AlertType.ERROR,
+                            "Gagal",
+                            data.message ?: "Tidak dapat menandai pengumuman sudah dibaca.",
+                        )
+                    }
+                }
+                is ApiResult.Err -> {
+                    alert = AppAlert(
+                        AlertType.ERROR,
+                        "Gagal",
+                        r.message,
+                    )
+                }
+            }
+            announcementMarkingRead = false
+        }
+    }
+
+    private fun applyAnnouncementReadLocal(item: AnnouncementDto, readCount: Int?) {
+        val key = item.resolvedId()
+        announcementPrefs.markRead(key)
+        val idx = announcements.indexOfFirst { it.resolvedId() == key }
+        if (idx >= 0) {
+            announcements[idx] = announcements[idx].copy(
+                isRead = true,
+                readCount = readCount ?: announcements[idx].readCount,
+            )
+        }
+    }
+
+    /** Tutup modal + snooze jika tidak ada pengumuman belum dibaca; else fokus item berikutnya. */
+    private fun finishAnnouncementReadIfDone() {
+        val nextUnread = announcements.firstOrNull { !it.markedRead() }
+        if (nextUnread == null) {
+            announcementPrefs.snoozeModal()
+            dismissAnnouncement()
+        } else {
+            announcementModalStartId = nextUnread.resolvedId()
+        }
+    }
+
+    /**
+     * Ambil pengumuman PPPoE aktif dari server.
+     * Cache singkat ~10 menit; [force] mengabaikan cache (mis. pull-to-refresh).
+     */
+    fun refreshAnnouncements(force: Boolean = false) {
+        if (!loggedIn) return
+        val now = System.currentTimeMillis()
+        if (!force &&
+            announcements.isNotEmpty() &&
+            now - announcementsFetchedAtMs < announcementsCacheMs
+        ) {
+            return
+        }
+        if (announcementsLoading) return
+        announcementsLoading = true
+        viewModelScope.launch {
+            when (val r = repo.announcements()) {
+                is ApiResult.Ok -> {
+                    if (r.data.success) {
+                        announcementsFetchedAtMs = System.currentTimeMillis()
+                        setAnnouncements(r.data.items())
+                    }
+                }
+                is ApiResult.Err -> Unit
+            }
+            announcementsLoading = false
+        }
+    }
+
+    // ---- User guide (FAQ onboarding) ----
+    var guideSession by mutableStateOf<GuideSession?>(null)
+        private set
+    /** Pesanan demo untuk highlight layar instruksi saat panduan (bukan pesanan nyata). */
+    var guideDemoOrder by mutableStateOf<OrderDto?>(null)
+        private set
+
+    fun startUserGuide(guideId: String) {
+        val guide = UserGuides.byId(guideId) ?: return
+        dismissAnnouncement()
+        guideSession = GuideSession(guide, 0)
+        syncGuideDemoOrder()
+        // Siapkan data layar yang akan dilalui panduan.
+        if (loggedIn) {
+            loadPaymentMethods()
+            loadOrders()
+            refreshBilling()
+        }
+    }
+
+    fun nextGuideStep() {
+        val current = guideSession ?: return
+        if (current.isLast) {
+            endUserGuide()
+        } else {
+            guideSession = current.copy(stepIndex = current.stepIndex + 1)
+            syncGuideDemoOrder()
+        }
+    }
+
+    fun skipUserGuide() {
+        endUserGuide()
+    }
+
+    private fun endUserGuide() {
+        guideSession = null
+        guideDemoOrder = null
+    }
+
+    private fun syncGuideDemoOrder() {
+        val target = guideSession?.step?.target
+        guideDemoOrder = target?.let { UserGuides.demoOrderFor(it) }
+    }
+
     // ---- Profil & langganan ----
     var profile by mutableStateOf<UserProfile?>(null)
         private set
@@ -193,10 +416,18 @@ class AppViewModel : ViewModel() {
     var orderError by mutableStateOf<String?>(null)
     var orderStatusRefreshing by mutableStateOf(false)
         private set
+    /** Batas waktu bayar QRIS tagihan (epoch ms). */
+    var billPaymentExpiresAtMs by mutableStateOf<Long?>(null)
+        private set
+    private val billPaymentPrefs = BillPaymentPrefs(ObillApp.instance)
+    private var billPayPollJob: Job? = null
 
-    // ---- Riwayat pesanan ----
+    // ---- Riwayat pesanan (PPPoE + PPOB) ----
     val orders = mutableStateListOf<OrderDto>()
+    val unifiedOrders = mutableStateListOf<UnifiedHistoryItem>()
     var ordersLoading by mutableStateOf(false)
+        private set
+    var ordersError by mutableStateOf<String?>(null)
         private set
 
     // ---- Perangkat (Genie ACS) ----
@@ -241,8 +472,6 @@ class AppViewModel : ViewModel() {
     private fun persistComplaints() {
         complaintStore.save(repo.tokenStore.phone, complaints.toList())
     }
-
-    var docTitle by mutableStateOf("Syarat & Ketentuan")
 
     // Banner "Status Tagihan Kamu" hanya tampil sekali per sesi (sampai ditutup pengguna).
     var billingBannerVisible by mutableStateOf(true)
@@ -323,6 +552,7 @@ class AppViewModel : ViewModel() {
                 body = body,
                 type = data["type"],
                 orderId = data["order_id"]?.toIntOrNull(),
+                refId = data["ref_id"],
                 notificationId = data["notification_id"]?.toIntOrNull()
                     ?: data["id"]?.toIntOrNull(),
             )
@@ -354,7 +584,11 @@ class AppViewModel : ViewModel() {
     }
 
     private fun handlePushOpened(data: Map<String, String>) {
-        pendingPushRoute = routeForNotificationType(data["type"], data["order_id"]?.toIntOrNull())
+        pendingPushRoute = routeForNotificationType(
+            data["type"],
+            data["order_id"]?.toIntOrNull(),
+            data["ref_id"],
+        )
         refreshUnreadCount()
     }
 
@@ -363,12 +597,13 @@ class AppViewModel : ViewModel() {
         body: String,
         type: String?,
         orderId: Int?,
+        refId: String? = null,
         notificationId: Int?,
     ) {
         if (notificationPopup != null) return
         if (notificationId != null && shownNotificationStore.isShown(notificationId)) return
         notificationPopup = alertForNotification(title, body, type)
-        notificationPopupRoute = routeForNotificationType(type, orderId)
+        notificationPopupRoute = routeForNotificationType(type, orderId, refId)
         pendingPopupNotificationId = notificationId
     }
 
@@ -378,7 +613,7 @@ class AppViewModel : ViewModel() {
 
     private fun alertForNotification(title: String, body: String, type: String?): AppAlert {
         val alertType = when (type) {
-            "payment_verified" -> AlertType.SUCCESS
+            "payment_verified", "ppob_success" -> AlertType.SUCCESS
             "payment_rejected", "expiry_reminder_24h" -> AlertType.ERROR
             "billing_reminder" -> AlertType.WARNING
             else -> AlertType.INFO
@@ -389,9 +624,13 @@ class AppViewModel : ViewModel() {
     private fun alertForNotification(dto: NotificationDto): AppAlert =
         alertForNotification(dto.title ?: "Notifikasi", dto.body ?: "", dto.type)
 
-    private fun routeForNotificationType(type: String?, orderId: Int?): String = when (type) {
+    private fun notificationRefId(dto: NotificationDto): String? =
+        dto.data?.get("ref_id")?.toString()?.takeIf { it.isNotBlank() }
+
+    private fun routeForNotificationType(type: String?, orderId: Int?, refId: String? = null): String = when (type) {
         "billing_reminder", "expiry_reminder_24h" -> Routes.OUTSTANDING
         "payment_verified" -> Routes.HISTORY
+        "ppob_success" -> refId?.let { Routes.ppobDetail(it) } ?: Routes.PPOB
         "payment_rejected" -> {
             orderId?.let { id ->
                 viewModelScope.launch {
@@ -458,7 +697,7 @@ class AppViewModel : ViewModel() {
             if (notificationPopup != null) return
             if (id != null && shownNotificationStore.isShown(id)) return
             notificationPopup = alertForNotification(first)
-            notificationPopupRoute = routeForNotificationType(first.type, first.orderId)
+            notificationPopupRoute = routeForNotificationType(first.type, first.orderId, notificationRefId(first))
             pendingPopupNotificationId = id
         }
     }
@@ -553,27 +792,35 @@ class AppViewModel : ViewModel() {
 
     private fun evaluateBillingReminder() {
         if (billingReminderShown) return
-        val np = billDto?.nextPayment ?: return
-        val due = billDto?.nextPayment?.dueDate
+        val bill = billDto ?: return
+        val np = bill.nextPayment ?: return
+        val dueLabel = bill.dueDisplay().takeIf { it != "-" }
+        val disconnectLabel = bill.disconnectDisplay().takeIf { it != "-" }
         when {
             np.isOverdue == true -> {
                 billingReminderShown = true
+                val disconnectHint = disconnectLabel?.let {
+                    " Layanan akan diputus pada $it jika belum bayar."
+                }.orEmpty()
                 billingReminder = AppAlert(
                     AlertType.ERROR,
                     "Tagihan Jatuh Tempo",
                     "Masa aktif layanan Anda telah berakhir" +
-                        (due?.let { " (jatuh tempo ${formatDateId(it)})" } ?: "") +
-                        ". Segera lakukan pembayaran agar layanan tetap aktif.",
+                        (dueLabel?.let { " ($it)" } ?: "") +
+                        ".$disconnectHint Segera lakukan pembayaran agar layanan tetap aktif.",
                 )
             }
-            np.daysUntilDue == 1 -> {
+            np.daysUntilDue == 1 || bill.shouldShowDisconnectHint() -> {
                 billingReminderShown = true
+                val disconnectHint = disconnectLabel?.let {
+                    " Layanan diputus jika belum bayar: $it."
+                }.orEmpty()
                 billingReminder = AppAlert(
                     AlertType.WARNING,
                     "Masa Aktif Hampir Habis",
-                    "Masa aktif layanan Anda tersisa 1 hari lagi" +
-                        (due?.let { " (jatuh tempo ${formatDateId(it)})" } ?: "") +
-                        ". Lakukan pembayaran sekarang untuk menghindari isolir.",
+                    "Masa aktif layanan Anda hampir berakhir" +
+                        (dueLabel?.let { " ($it)" } ?: "") +
+                        ".$disconnectHint Lakukan pembayaran sekarang untuk menghindari isolir.",
                 )
             }
         }
@@ -680,6 +927,14 @@ class AppViewModel : ViewModel() {
             repo.logout(subId)
             OneSignalManager.logout()
             clearNotificationState()
+            announcementModalVisible = false
+            announcementModalStartId = null
+            announcementMarkingRead = false
+            announcements.clear()
+            announcementsFetchedAtMs = 0L
+            announcementPrefs.clear()
+            guideSession = null
+            guideDemoOrder = null
             loggedIn = false
             profile = null
             payments.clear()
@@ -693,6 +948,8 @@ class AppViewModel : ViewModel() {
             rxSummary = null
             complaints.clear()
             orders.clear()
+            unifiedOrders.clear()
+            ordersError = null
             currentOrder = null
             packages.clear()
             pendingChange = null
@@ -716,7 +973,29 @@ class AppViewModel : ViewModel() {
         loadDevice()
         loadNotifications()
         refreshUnreadCount()
+        refreshAnnouncements()
+        refreshWallet()
         repo.tokenStore.customerId.takeIf { it > 0 }?.let { if (!pushLinked) linkPushForCustomer(it) }
+    }
+
+    fun updateWalletBalance(balance: Long) {
+        profile = profile?.copy(walletBalance = balance)
+    }
+
+    /** Refresh saldo wallet dari GET wallet (lebih akurat dari field me). */
+    fun refreshWallet() {
+        if (!loggedIn) return
+        viewModelScope.launch {
+            when (val r = repo.wallet()) {
+                is ApiResult.Ok -> {
+                    if (r.data.success) {
+                        val bal = r.data.wallet?.balance
+                        if (bal != null) updateWalletBalance(bal)
+                    }
+                }
+                is ApiResult.Err -> Unit
+            }
+        }
     }
 
     fun loadMe() {
@@ -1007,46 +1286,251 @@ class AppViewModel : ViewModel() {
         orderError = null
         orderSubmitting = true
         viewModelScope.launch {
+            val payMethod = methodId.ifBlank { "qris_dinamis" }
             if (orderFlow == OrderFlow.UPGRADE) {
                 val target = selectedUpgradeProfileId
                 if (target == null) { orderError = "Paket tujuan belum dipilih."; orderSubmitting = false; return@launch }
-                when (val r = repo.upgradeRequest(target, methodId, note)) {
-                    is ApiResult.Ok -> handleCreated(r.data.order, r.data.message, onSuccess)
-                    is ApiResult.Err -> handleOrderError(r)
+                when (val r = repo.upgradeRequest(target, payMethod, note)) {
+                    is ApiResult.Ok -> {
+                        if (r.data.success) {
+                            val order = r.data.order?.let { o ->
+                                o.copy(payment = o.payment ?: r.data.payment)
+                            }
+                            handleCreated(order, r.data.message, onSuccess)
+                        } else {
+                            orderError = r.data.message ?: "Gagal membuat pesanan."
+                            alert = AppAlert(AlertType.ERROR, "Gagal Membuat Pesanan", orderError ?: "")
+                        }
+                    }
+                    is ApiResult.Err -> handleOrderError(r, onSuccess)
                 }
             } else {
-                when (val r = repo.billPay(methodId, note)) {
-                    is ApiResult.Ok -> handleCreated(r.data.order, r.data.message, onSuccess)
-                    is ApiResult.Err -> handleOrderError(r)
+                when (val r = repo.billPay(payMethod, note)) {
+                    is ApiResult.Ok -> {
+                        if (r.data.success) {
+                            val enriched = r.data.order?.enrichedFromPayResp(r.data)
+                            handleCreated(enriched, r.data.message, onSuccess)
+                        } else {
+                            orderError = r.data.message ?: "Gagal membuat pesanan."
+                            when (r.data.code) {
+                                "QRIS_UNAVAILABLE" -> alert = AppAlert(
+                                    AlertType.ERROR,
+                                    "QRIS Tidak Tersedia",
+                                    r.data.message ?: "QRIS dinamis belum dikonfigurasi. Hubungi admin.",
+                                )
+                                "OPEN_ORDER_EXISTS" -> resumeOpenBillOrder(onSuccess)
+                                else -> alert = AppAlert(AlertType.ERROR, "Gagal Membuat Pesanan", orderError ?: "")
+                            }
+                        }
+                    }
+                    is ApiResult.Err -> handleOrderError(r, onSuccess)
                 }
             }
             orderSubmitting = false
         }
     }
 
-    private fun handleOrderError(e: ApiResult.Err) {
+    private fun handleOrderError(e: ApiResult.Err, onOpenExisting: () -> Unit = {}) {
         orderError = e.message
-        if (e.code == "OPEN_ORDER_EXISTS") {
-            alert = AppAlert(
-                AlertType.WARNING,
-                "Masih Ada Pesanan",
-                "Anda masih memiliki pesanan yang belum selesai. Selesaikan atau batalkan dulu pesanan tersebut."
+        when (e.code) {
+            "OPEN_ORDER_EXISTS" -> {
+                alert = AppAlert(
+                    AlertType.WARNING,
+                    "Masih Ada Pesanan",
+                    "Anda masih memiliki pesanan yang belum selesai. Membuka pesanan tersebut…",
+                )
+                resumeOpenBillOrder(onOpenExisting)
+            }
+            "QRIS_UNAVAILABLE" -> alert = AppAlert(
+                AlertType.ERROR,
+                "QRIS Tidak Tersedia",
+                e.message,
             )
-        } else {
-            alert = AppAlert(AlertType.ERROR, "Gagal Membuat Pesanan", e.message)
+            else -> alert = AppAlert(AlertType.ERROR, "Gagal Membuat Pesanan", e.message)
+        }
+    }
+
+    private fun resumeOpenBillOrder(onReady: () -> Unit) {
+        viewModelScope.launch {
+            when (val r = repo.bill()) {
+                is ApiResult.Ok -> {
+                    val open = r.data.openOrder
+                    billOpenOrder = open
+                    if (open != null) {
+                        prepareBillQrisOrder(open)
+                        onReady()
+                    }
+                }
+                is ApiResult.Err -> Unit
+            }
         }
     }
 
     private fun handleCreated(order: OrderDto?, message: String?, onSuccess: () -> Unit) {
         if (order != null) {
-            currentOrder = order
+            prepareBillQrisOrder(order)
+            if (order.status == "confirmed") {
+                loadMe(); loadPayments(); loadBill()
+                alert = AppAlert(
+                    AlertType.SUCCESS,
+                    "Pembayaran Berhasil",
+                    message ?: "Tagihan lunas. Layanan Anda telah diaktifkan.",
+                )
+            }
             onSuccess()
         } else {
             orderError = message ?: "Gagal membuat pesanan."
         }
     }
 
+    /** Siapkan order + cache QRIS + mulai poll bila masih pending. */
+    fun prepareBillQrisOrder(order: OrderDto) {
+        var prepared = order
+        val orderNo = order.orderNo
+        if (!orderNo.isNullOrBlank()) {
+            val cachedUrl = billPaymentPrefs.qrisImageUrl(orderNo)
+            val cachedPay = order.payment ?: WalletPaymentDto(
+                qrisImageUrl = cachedUrl,
+                qrisString = billPaymentPrefs.qrisString(orderNo),
+                payAmount = billPaymentPrefs.payAmount(orderNo),
+                amountBase = billPaymentPrefs.amountBase(orderNo),
+                expireMinutes = billPaymentPrefs.expireMinutes(orderNo),
+                merchantName = billPaymentPrefs.merchantName(orderNo),
+                payChannel = "qris_dinamis",
+                paymentStatus = "unpaid",
+            )
+            prepared = order.withMergedPayment(
+                cachedPay.copy(
+                    qrisImageUrl = order.payment?.qrisImageUrl ?: cachedUrl,
+                    qrisString = order.payment?.qrisString ?: billPaymentPrefs.qrisString(orderNo),
+                ),
+            )
+            val pay = prepared.payment
+            val deadline = resolveBillPayDeadline(pay?.expiresAt ?: prepared.expiresAt, pay?.expireMinutes, orderNo)
+            billPaymentExpiresAtMs = deadline
+            if (pay != null && prepared.status == "pending") {
+                billPaymentPrefs.save(
+                    orderNo = orderNo,
+                    qrisImageUrl = pay.qrisImageUrl,
+                    qrisString = pay.qrisString,
+                    payAmount = pay.payAmount,
+                    amountBase = pay.amountBase,
+                    expireMinutes = pay.expireMinutes,
+                    expiresAtMs = deadline,
+                    merchantName = pay.merchantName,
+                )
+            }
+        } else {
+            billPaymentExpiresAtMs = resolveBillPayDeadline(
+                order.payment?.expiresAt ?: order.expiresAt,
+                order.payment?.expireMinutes,
+                "",
+            )
+        }
+        currentOrder = prepared
+        if (prepared.status == "pending" && prepared.isQrisDinamisPayment()) {
+            startBillPayPoll()
+        } else {
+            stopBillPayPoll()
+        }
+    }
+
+    fun resumeBillQrisPayment() {
+        val order = currentOrder ?: billOpenOrder ?: return
+        prepareBillQrisOrder(order)
+    }
+
+    private fun startBillPayPoll() {
+        billPayPollJob?.cancel()
+        val orderNo = currentOrder?.orderNo
+        val orderId = currentOrder?.id
+        if (orderNo.isNullOrBlank() && orderId == null) return
+        billPayPollJob = viewModelScope.launch {
+            while (isActive) {
+                delay(4_000)
+                when (val r = repo.billPayStatus(orderNo = orderNo, orderId = orderId)) {
+                    is ApiResult.Ok -> {
+                        if (!r.data.success) continue
+                        val prev = currentOrder
+                        var next = r.data.order ?: prev
+                        if (next != null) {
+                            next = next.withMergedPayment(r.data.payment ?: next.payment ?: prev?.payment)
+                            // pertahankan QRIS dari cache bila poll kosong
+                            val no = next.orderNo
+                            if (!no.isNullOrBlank()) {
+                                next = next.withMergedPayment(
+                                    next.payment?.copy(
+                                        qrisImageUrl = next.payment?.qrisImageUrl
+                                            ?: billPaymentPrefs.qrisImageUrl(no),
+                                        qrisString = next.payment?.qrisString
+                                            ?: billPaymentPrefs.qrisString(no),
+                                    ),
+                                )
+                            }
+                            currentOrder = next
+                        }
+                        val status = r.data.paymentStatus?.lowercase()
+                        val orderStatus = currentOrder?.status?.lowercase()
+                        when {
+                            r.data.paid == true || status == "paid" || orderStatus == "confirmed" -> {
+                                billPaymentPrefs.clear(orderNo)
+                                stopBillPayPoll()
+                                currentOrder = currentOrder?.copy(status = "confirmed", statusLabel = "Pembayaran Berhasil")
+                                loadMe(); loadPayments(); loadBill()
+                                return@launch
+                            }
+                            status == "cancelled" || orderStatus == "cancelled" ||
+                                status == "rejected" || orderStatus == "rejected" -> {
+                                billPaymentPrefs.clear(orderNo)
+                                stopBillPayPoll()
+                                return@launch
+                            }
+                        }
+                    }
+                    is ApiResult.Err -> Unit
+                }
+            }
+        }
+    }
+
+    private fun stopBillPayPoll() {
+        billPayPollJob?.cancel()
+        billPayPollJob = null
+    }
+
+    private fun resolveBillPayDeadline(expiresAt: String?, expireMinutes: Int?, orderNo: String): Long {
+        if (orderNo.isNotBlank()) {
+            billPaymentPrefs.expiresAtMs(orderNo)?.takeIf { it > System.currentTimeMillis() }?.let { return it }
+        }
+        parseBillDateTimeMs(expiresAt)?.let { return it }
+        val mins = expireMinutes?.takeIf { it > 0 } ?: 30
+        return System.currentTimeMillis() + mins * 60_000L
+    }
+
+    private fun parseBillDateTimeMs(raw: String?): Long? {
+        if (raw.isNullOrBlank()) return null
+        val patterns = listOf(
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
+        )
+        for (p in patterns) {
+            try {
+                val fmt = java.text.SimpleDateFormat(p, java.util.Locale.US)
+                fmt.isLenient = false
+                return fmt.parse(raw)?.time
+            } catch (_: Exception) {
+            }
+        }
+        return null
+    }
+
     fun confirmOrder(referenceNo: String?, onSuccess: () -> Unit) {
+        // QRIS dinamis: tidak memakai order_confirm
+        if (currentOrder?.isQrisDinamisPayment() == true) {
+            onSuccess()
+            return
+        }
         val id = currentOrder?.id ?: return
         orderError = null
         orderSubmitting = true
@@ -1076,8 +1560,11 @@ class AppViewModel : ViewModel() {
         viewModelScope.launch {
             when (val r = repo.orderCancel(id)) {
                 is ApiResult.Ok -> {
+                    stopBillPayPoll()
+                    billPaymentPrefs.clear(currentOrder?.orderNo)
                     currentOrder = null
                     billOpenOrder = null
+                    billPaymentExpiresAtMs = null
                     loadBill()
                     alertOnDismiss = onSuccess
                     alert = AppAlert(
@@ -1098,7 +1585,30 @@ class AppViewModel : ViewModel() {
 
     /** Polling status pesanan berjalan. Bila sudah confirmed, refresh data langganan. */
     fun refreshCurrentOrder(onConfirmed: () -> Unit = {}) {
-        val id = currentOrder?.id ?: return
+        val order = currentOrder ?: return
+        if (order.isQrisDinamisPayment()) {
+            // status QRIS dinamis diurus poll bill_pay_status
+            viewModelScope.launch {
+                orderStatusRefreshing = true
+                val r = repo.billPayStatus(order.orderNo, order.id)
+                if (r is ApiResult.Ok && r.data.success) {
+                    var next = r.data.order ?: currentOrder
+                    if (next != null) {
+                        next = next.withMergedPayment(r.data.payment ?: next.payment)
+                        currentOrder = next
+                    }
+                    if (r.data.paid == true || currentOrder?.status == "confirmed") {
+                        billPaymentPrefs.clear(order.orderNo)
+                        stopBillPayPoll()
+                        loadMe(); loadPayments(); loadBill()
+                        onConfirmed()
+                    }
+                }
+                orderStatusRefreshing = false
+            }
+            return
+        }
+        val id = order.id ?: return
         if (orderStatusRefreshing) return
         orderStatusRefreshing = true
         viewModelScope.launch {
@@ -1119,13 +1629,47 @@ class AppViewModel : ViewModel() {
 
     fun loadOrders() {
         ordersLoading = true
+        ordersError = null
         viewModelScope.launch {
-            when (val r = repo.orders()) {
-                is ApiResult.Ok -> {
-                    orders.clear()
-                    orders.addAll(r.data.orders)
+            coroutineScope {
+                val pppoeDeferred = async { repo.orders() }
+                val ppobDeferred = async { repo.ppobTransactions(limit = 50) }
+
+                val merged = mutableListOf<UnifiedHistoryItem>()
+                var hadError: String? = null
+
+                when (val r = pppoeDeferred.await()) {
+                    is ApiResult.Ok -> {
+                        orders.clear()
+                        orders.addAll(r.data.orders)
+                        merged.addAll(r.data.orders.map { it.toUnifiedHistoryItem() })
+                        if (!r.data.success && r.data.orders.isEmpty()) {
+                            hadError = "Gagal memuat pesanan PPPoE"
+                        }
+                    }
+                    is ApiResult.Err -> hadError = r.message
                 }
-                is ApiResult.Err -> { /* biarkan kosong */ }
+
+                when (val r = ppobDeferred.await()) {
+                    is ApiResult.Ok -> {
+                        merged.addAll(r.data.transactions.map { it.toUnifiedHistoryItem() })
+                        if (!r.data.success && r.data.transactions.isEmpty() &&
+                            hadError == null && !r.data.message.isNullOrBlank()
+                        ) {
+                            hadError = r.data.message
+                        }
+                    }
+                    is ApiResult.Err -> {
+                        if (hadError == null) hadError = r.message
+                    }
+                }
+
+                unifiedOrders.clear()
+                unifiedOrders.addAll(
+                    merged.sortedByDescending { it.createdAt.orEmpty() },
+                )
+                // Tampilkan error hanya jika kedua sumber gagal / list kosong + ada error
+                ordersError = if (unifiedOrders.isEmpty()) hadError else null
             }
             ordersLoading = false
         }

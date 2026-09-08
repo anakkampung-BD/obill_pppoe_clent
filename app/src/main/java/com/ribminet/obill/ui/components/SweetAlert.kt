@@ -115,7 +115,7 @@ fun SweetAlertDialog(
                     .clip(RoundedCornerShape(12.dp))
                     .background(color)
                     .clickableNoRipple(onConfirm)
-                    .padding(vertical = 13.dp),
+                    .padding(vertical = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(alert.confirmText, color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)

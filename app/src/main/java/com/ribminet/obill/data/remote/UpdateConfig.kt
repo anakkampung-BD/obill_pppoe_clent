@@ -1,36 +1,38 @@
 package com.ribminet.obill.data.remote
 
-import java.net.URLEncoder
-
 /**
- * Konfigurasi auto-deteksi versi rilis terbaru dari GitLab.
+ * Konfigurasi auto-deteksi versi rilis terbaru dari GitHub Releases.
  *
- * Repo publik: https://gitrepo.aks-network.co.id/siribere/obill_pppoe_client
+ * Repo: https://github.com/anakkampung-BD/obill_pppoe_clent
  *
- * Pengecekan memakai GitLab Releases API (tanpa token untuk repo publik).
- * APK diunduh dari asset rilis (Package Registry) lalu dipasang otomatis.
+ * Pengecekan memakai GitHub Releases API (tanpa token untuk repo publik).
+ * APK diunduh dari asset rilis lalu dipasang otomatis.
  *
- * [ACCESS_TOKEN] hanya diisi bila project kembali dijadikan privat.
+ * [ACCESS_TOKEN] hanya diisi bila repo privat (classic PAT dengan scope `repo` /
+ * fine-grained: Contents read).
+ *
+ * Catatan migrasi: rilis transisi (mis. 3.0.5) boleh tetap diunggah ke repo GitLab
+ * lama agar klien 3.0.4 masih bisa mengunduh; binary rilis itu sudah memakai URL
+ * GitHub ini untuk pengecekan update selanjutnya.
  */
 object UpdateConfig {
-    const val HOST = "https://gitrepo.aks-network.co.id"
-    const val PROJECT_PATH = "siribere/obill_pppoe_client"
-    const val ACCESS_TOKEN = ""
+    const val HOST = "https://github.com"
+    const val API_HOST = "https://api.github.com"
+    /** owner/repo — harus sama dengan path di github.com */
+    const val PROJECT_PATH = "anakkampung-BD/obill_pppoe_clent"
+    const val ACCESS_TOKEN = "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"
 
     val isConfigured: Boolean get() = PROJECT_PATH.isNotBlank()
 
-    private val encodedProject: String
-        get() = URLEncoder.encode(PROJECT_PATH, "UTF-8")
-
-    /** Endpoint rilis terbaru (permalink/latest). */
+    /** Endpoint rilis terbaru. */
     val latestReleaseApi: String
-        get() = "$HOST/api/v4/projects/$encodedProject/releases/permalink/latest"
+        get() = "$API_HOST/repos/$PROJECT_PATH/releases/latest"
 
-    /** Daftar rilis (fallback bila permalink/latest redirect). */
+    /** Daftar rilis (fallback). */
     val releasesApi: String
-        get() = "$HOST/api/v4/projects/$encodedProject/releases"
+        get() = "$API_HOST/repos/$PROJECT_PATH/releases"
 
     /** Halaman rilis (fallback bila APK tidak ditemukan pada aset). */
     val releasesPage: String
-        get() = "$HOST/$PROJECT_PATH/-/releases"
+        get() = "$HOST/$PROJECT_PATH/releases"
 }

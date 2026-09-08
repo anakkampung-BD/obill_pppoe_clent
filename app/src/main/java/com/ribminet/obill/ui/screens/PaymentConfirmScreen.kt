@@ -189,7 +189,6 @@ fun PaymentConfirmScreen(
         }
 
         Box(modifier = Modifier
-            .background(ScreenBackground)
             .padding(16.dp)) {
             PrimaryButton(
                 text = if (channel == PaymentChannel.INSTANT) "Lanjutkan Pembayaran" else "Kirim Konfirmasi Manual",

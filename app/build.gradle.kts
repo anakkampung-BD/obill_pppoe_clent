@@ -15,8 +15,8 @@ android {
         applicationId = "com.obill.aks"
         minSdk = 26
         targetSdk = 34
-        versionCode = 30004
-        versionName = "3.0.4"
+        versionCode = 30006
+        versionName = "3.0.6"
         vectorDrawables { useSupportLibrary = true }
     }
 
@@ -77,6 +77,7 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
     implementation("androidx.activity:activity-compose:1.9.0")
 

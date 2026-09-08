@@ -29,22 +29,38 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ribminet.obill.data.remote.BillDto
 import com.ribminet.obill.data.remote.OrderDto
-import com.ribminet.obill.data.remote.formatDateId
+import com.ribminet.obill.data.remote.activeUntilDisplay
+import com.ribminet.obill.data.remote.creditApplied
+import com.ribminet.obill.data.remote.creditNote
+import com.ribminet.obill.data.remote.disconnectDisplay
+import com.ribminet.obill.data.remote.dueDisplay
+import com.ribminet.obill.data.remote.formatDateTimeId
+import com.ribminet.obill.data.remote.hasLatePenalty
 import com.ribminet.obill.data.remote.installationFeeAmount
 import com.ribminet.obill.data.remote.installationFeeLabel
 import com.ribminet.obill.data.remote.isFirstActivation
+import com.ribminet.obill.data.remote.isProrate
 import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.latePenaltyLabel
 import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.periodLabel
+import com.ribminet.obill.data.remote.shouldShowDisconnectHint
 import com.ribminet.obill.data.remote.subscriptionAmount
+import com.ribminet.obill.data.remote.subscriptionGross
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.BillAmountBreakdown
+import com.ribminet.obill.ui.components.LatePenaltyNotice
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SecondaryButton
 import com.ribminet.obill.ui.components.StatusBadge
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.BrandBlueSurface
+import com.ribminet.obill.ui.theme.CardWhite
 import com.ribminet.obill.ui.theme.DangerRed
+import com.ribminet.obill.ui.theme.DangerSurface
 import com.ribminet.obill.ui.theme.SuccessGreen
 import com.ribminet.obill.ui.theme.SuccessSurface
 import com.ribminet.obill.ui.theme.TextPrimary
@@ -62,6 +78,8 @@ fun OutstandingScreen(
     onBack: () -> Unit,
     onPay: () -> Unit,
     onViewOrder: () -> Unit,
+    guideMode: Boolean = false,
+    paySubmitting: Boolean = false,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(title = "Tagihan Berjalan", onBack = onBack)
@@ -69,19 +87,60 @@ fun OutstandingScreen(
             loading && bill == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = BrandBlue)
             }
-            error != null && bill == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            error != null && bill == null && !guideMode -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Text(error, color = TextSecondary, fontSize = 13.sp)
             }
+            bill == null && guideMode -> GuideOutstandingPlaceholder(onPay = onPay, paySubmitting = paySubmitting)
             bill == null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Text("Tidak ada tagihan saat ini.", color = TextSecondary, fontSize = 13.sp)
             }
-            else -> Content(bill, openOrder, onPay, onViewOrder)
+            else -> Content(bill, openOrder, onPay, onViewOrder, paySubmitting)
         }
     }
 }
 
 @Composable
-private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onViewOrder: () -> Unit) {
+private fun GuideOutstandingPlaceholder(onPay: () -> Unit, paySubmitting: Boolean = false) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .guideTarget(GuideTarget.OUTSTANDING_SUMMARY)
+                .clip(RoundedCornerShape(14.dp))
+                .background(CardWhite)
+                .padding(16.dp),
+        ) {
+            Text("Contoh rincian tagihan", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Di halaman ini biasanya tampil nominal, periode, kredit/prorata, dan denda bila ada.",
+                color = TextSecondary,
+                fontSize = 13.sp,
+            )
+        }
+        Spacer(Modifier.height(20.dp))
+        PrimaryButton(
+            text = if (paySubmitting) "Memproses…" else "Bayar Tagihan",
+            enabled = !paySubmitting,
+            onClick = onPay,
+            modifier = Modifier.guideTarget(GuideTarget.OUTSTANDING_PAY),
+        )
+    }
+}
+
+@Composable
+private fun Content(
+    bill: BillDto,
+    openOrder: OrderDto?,
+    onPay: () -> Unit,
+    onViewOrder: () -> Unit,
+    paySubmitting: Boolean = false,
+) {
     val overdue = bill.nextPayment?.isOverdue == true
     val firstActivation = bill.isFirstActivation()
     val subscriptionLabel = "Biaya berlangganan — ${bill.profileName ?: "Paket"}"
@@ -95,6 +154,7 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .guideTarget(GuideTarget.OUTSTANDING_PAY)
                     .clip(RoundedCornerShape(14.dp))
                     .background(WarningSurface)
                     .padding(14.dp)
@@ -150,7 +210,39 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
             Spacer(Modifier.height(16.dp))
         }
 
-        AppCard {
+        bill.latePenalty?.takeIf { bill.hasLatePenalty() }?.let { penalty ->
+            LatePenaltyNotice(penalty = penalty)
+            Spacer(Modifier.height(16.dp))
+        }
+
+        if (bill.shouldShowDisconnectHint()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(DangerSurface)
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Text("Batas Putus Layanan", fontWeight = FontWeight.Bold, color = DangerRed, fontSize = 13.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Masa aktif berakhir: ${bill.dueDisplay()}",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                    )
+                    Text(
+                        "Layanan diputus jika belum bayar: ${bill.disconnectDisplay()}",
+                        color = DangerRed,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
+        AppCard(modifier = Modifier.guideTarget(GuideTarget.OUTSTANDING_SUMMARY)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
@@ -167,6 +259,7 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
                     Text(
                         when {
                             firstActivation -> "Aktivasi pertama"
+                            bill.isProrate() -> "Penyesuaian ke akhir bulan"
                             bill.pendingChange?.pending == true -> "Paket baru (periode berikutnya)"
                             else -> "Perpanjang langganan"
                         },
@@ -179,24 +272,41 @@ private fun Content(bill: BillDto, openOrder: OrderDto?, onPay: () -> Unit, onVi
             BillAmountBreakdown(
                 subscriptionLabel = subscriptionLabel,
                 subscriptionAmount = bill.subscriptionAmount(),
+                subscriptionGross = bill.subscriptionGross(),
+                creditApplied = bill.creditApplied(),
+                creditNote = bill.creditNote(),
+                periodLabel = bill.periodLabel(),
                 installationLabel = bill.installationFeeLabel(),
                 installationAmount = bill.installationFeeAmount(),
                 latePenaltyAmount = bill.latePenaltyAmount(),
+                latePenaltyLabel = bill.latePenaltyLabel(),
                 totalAmount = bill.payableTotal(),
             )
             Spacer(Modifier.height(8.dp))
-            InfoRow("Jatuh Tempo", formatDateId(bill.nextPayment?.dueDate))
-            bill.previewRenewal?.let {
-                InfoRow("Aktif Sampai (Setelah Bayar)", formatDateId(it.newExpiredAt))
-                InfoRow("Tambahan Masa Aktif", "${it.extensionDays ?: 30} hari")
+            InfoRow("Masa aktif berakhir", bill.dueDisplay())
+            val sisaHari = bill.nextPayment?.daysUntilDue
+            val sisaText = when {
+                sisaHari == null -> "-"
+                sisaHari < 0 -> "Lewat tempo"
+                else -> "$sisaHari hari"
+            }
+            InfoRow("Sisa masa aktif anda", sisaText)
+            bill.billingBreakdown?.prorateDays?.takeIf { it > 0 }?.let { days ->
+                InfoRow("Hari prorata", "$days hari")
             }
         }
 
         Spacer(Modifier.height(20.dp))
         if (openOrder == null) {
             PrimaryButton(
-                text = if (firstActivation) "Bayar Aktivasi" else "Bayar Tagihan",
+                text = when {
+                    paySubmitting -> "Memproses…"
+                    firstActivation -> "Bayar Aktivasi"
+                    else -> "Bayar Tagihan"
+                },
+                enabled = !paySubmitting,
                 onClick = onPay,
+                modifier = Modifier.guideTarget(GuideTarget.OUTSTANDING_PAY),
             )
         }
     }

@@ -28,7 +28,7 @@ val HeroGreenTop = Color(0xFF4FC68C)
 val HeroGreenBottom = Color(0xFF1FA75A)
 
 // Warna semantik theme-aware
-val ScreenBackground: Color get() = pick(Color(0xFFF4F6F8), Color(0xFF0F1216))
+val ScreenBackground: Color get() = pick(Color(0xFFF2F7FB), Color(0xFF0F1216))
 val CardWhite: Color get() = pick(Color(0xFFFFFFFF), Color(0xFF1B1F25))
 
 val TextPrimary: Color get() = pick(Color(0xFF24303A), Color(0xFFECEFF2))

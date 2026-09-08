@@ -59,10 +59,59 @@ data class ActivationDto(
 
 data class BillAmountsDto(
     @SerializedName("subscription_amount") val subscriptionAmount: Long? = null,
+    /** Langganan sebelum kredit (prorata atau full). */
+    @SerializedName("subscription_gross") val subscriptionGross: Long? = null,
+    @SerializedName("credit_applied") val creditApplied: Long? = null,
+    @SerializedName("billing_credit_balance") val billingCreditBalance: Long? = null,
     @SerializedName("installation_fee_amount") val installationFeeAmount: Long? = null,
     @SerializedName("installation_fee_label") val installationFeeLabel: String? = null,
     @SerializedName("late_penalty_amount") val latePenaltyAmount: Long? = null,
+    /** Nominal yang harus dibayar pelanggan. */
     @SerializedName("total_amount") val totalAmount: Long? = null,
+)
+
+/** Rincian periode EOM / prorata / kredit. */
+data class BillingBreakdownDto(
+    @SerializedName("billing_mode") val billingMode: String? = null,
+    @SerializedName("period_label") val periodLabel: String? = null,
+    @SerializedName("period_year") val periodYear: Int? = null,
+    @SerializedName("period_month") val periodMonth: Int? = null,
+    @SerializedName("days_in_period") val daysInPeriod: Int? = null,
+    @SerializedName("prorate_days") val prorateDays: Int? = null,
+    @SerializedName("daily_rate") val dailyRate: Long? = null,
+    @SerializedName("subscription_full_price") val subscriptionFullPrice: Long? = null,
+    @SerializedName("subscription_amount") val subscriptionAmount: Long? = null,
+    @SerializedName("billing_credit_balance") val billingCreditBalance: Long? = null,
+    @SerializedName("billing_credit_note") val billingCreditNote: String? = null,
+    @SerializedName("credit_applied") val creditApplied: Long? = null,
+    @SerializedName("credit_remaining_after") val creditRemainingAfter: Long? = null,
+    @SerializedName("amount_payable") val amountPayable: Long? = null,
+    @SerializedName("new_expired_at") val newExpiredAt: String? = null,
+    val label: String? = null,
+    @SerializedName("disconnect_grace_days") val disconnectGraceDays: Int? = null,
+)
+
+data class LatePenaltyDto(
+    val applies: Boolean? = null,
+    @SerializedName("active_end_date") val activeEndDate: String? = null,
+    @SerializedName("active_end_datetime") val activeEndDatetime: String? = null,
+    @SerializedName("due_date") val dueDate: String? = null,
+    @SerializedName("payment_date") val paymentDate: String? = null,
+    @SerializedName("penalty_from_date") val penaltyFromDate: String? = null,
+    @SerializedName("penalty_to_date") val penaltyToDate: String? = null,
+    @SerializedName("late_days") val lateDays: Int? = null,
+    @SerializedName("subscription_amount") val subscriptionAmount: Long? = null,
+    @SerializedName("daily_penalty_rate") val dailyPenaltyRate: Long? = null,
+    @SerializedName("daily_penalty_rate_formatted") val dailyPenaltyRateFormatted: String? = null,
+    @SerializedName("total_penalty") val totalPenalty: Long? = null,
+    @SerializedName("total_penalty_formatted") val totalPenaltyFormatted: String? = null,
+    @SerializedName("formula_label") val formulaLabel: String? = null,
+    val description: String? = null,
+)
+
+data class BillProfileDto(
+    @SerializedName("profile_id") val profileId: Int? = null,
+    @SerializedName("profile_name") val profileName: String? = null,
 )
 
 data class CustomerDto(
@@ -91,6 +140,8 @@ data class CustomerDto(
     @SerializedName("requires_installation_fee") val requiresInstallationFeeFlat: Boolean? = null,
     @SerializedName("installation_fee_amount") val installationFeeAmountFlat: Long? = null,
     @SerializedName("installation_fee_label") val installationFeeLabelFlat: String? = null,
+    @SerializedName("wallet_balance") val walletBalance: Long? = null,
+    @SerializedName("wallet_balance_formatted") val walletBalanceFormatted: String? = null,
 )
 
 data class TimeRemainingDto(
@@ -106,6 +157,9 @@ data class NextPaymentDto(
     @SerializedName("due_datetime") val dueDatetime: String? = null,
     @SerializedName("days_until_due") val daysUntilDue: Int? = null,
     @SerializedName("is_overdue") val isOverdue: Boolean? = null,
+    /** Kapan layanan diputus (biasanya due + 1 hari grace). */
+    @SerializedName("disconnect_at") val disconnectAt: String? = null,
+    @SerializedName("disconnect_grace_days") val disconnectGraceDays: Int? = null,
 )
 
 // ---- Ubah biodata ----
@@ -149,8 +203,14 @@ data class BillResp(
     val success: Boolean = false,
     val bill: BillDto? = null,
     @SerializedName("open_order") val openOrder: OrderDto? = null,
+    @SerializedName("qris_enabled") val qrisEnabled: Boolean? = null,
     val activation: ActivationDto? = null,
     val amounts: BillAmountsDto? = null,
+    @SerializedName("late_penalty") val latePenalty: LatePenaltyDto? = null,
+    @SerializedName("bill_profile") val billProfile: BillProfileDto? = null,
+    @SerializedName("billing_breakdown") val billingBreakdown: BillingBreakdownDto? = null,
+    @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
+    @SerializedName("next_payment") val nextPayment: NextPaymentDto? = null,
 )
 
 data class BillDto(
@@ -158,13 +218,16 @@ data class BillDto(
     @SerializedName("profile_name") val profileName: String? = null,
     @SerializedName("current_profile_id") val currentProfileId: Int? = null,
     @SerializedName("current_profile_name") val currentProfileName: String? = null,
+    /** Total yang harus dibayar (bukan selalu harga paket penuh). */
     val amount: Long? = null,
     @SerializedName("status_langganan") val statusLangganan: String? = null,
     @SerializedName("pending_change") val pendingChange: PendingChangeDto? = null,
     @SerializedName("next_payment") val nextPayment: NextPaymentDto? = null,
     @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
+    @SerializedName("billing_breakdown") val billingBreakdown: BillingBreakdownDto? = null,
     val activation: ActivationDto? = null,
     val amounts: BillAmountsDto? = null,
+    @SerializedName("late_penalty") val latePenalty: LatePenaltyDto? = null,
     @SerializedName("total_amount") val totalAmountFlat: Long? = null,
     @SerializedName("subscription_amount") val subscriptionAmountFlat: Long? = null,
     @SerializedName("installation_fee_amount") val installationFeeAmountFlat: Long? = null,
@@ -206,11 +269,17 @@ data class PreviewRenewalDto(
     @SerializedName("from_due_date") val fromDueDate: Boolean? = null,
     @SerializedName("new_started_at") val newStartedAt: String? = null,
     @SerializedName("new_expired_at") val newExpiredAt: String? = null,
+    /** @deprecated EOM: field dihapus di server; jangan dipakai di UI. */
     @SerializedName("extension_days") val extensionDays: Int? = null,
+    @SerializedName("billing_mode") val billingMode: String? = null,
+    @SerializedName("period_year") val periodYear: Int? = null,
+    @SerializedName("period_month") val periodMonth: Int? = null,
+    @SerializedName("days_in_period") val daysInPeriod: Int? = null,
+    @SerializedName("disconnect_grace_days") val disconnectGraceDays: Int? = null,
 )
 
 data class BillPayReq(
-    @SerializedName("payment_method") val paymentMethod: String,
+    @SerializedName("payment_method") val paymentMethod: String? = "qris_dinamis",
     @SerializedName("customer_note") val customerNote: String? = null,
 )
 
@@ -219,16 +288,35 @@ data class BillPayResp(
     val message: String? = null,
     val code: String? = null,
     val order: OrderDto? = null,
+    val payment: WalletPaymentDto? = null,
     @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
     val activation: ActivationDto? = null,
     val amounts: BillAmountsDto? = null,
+    @SerializedName("late_penalty") val latePenalty: LatePenaltyDto? = null,
+    @SerializedName("billing_breakdown") val billingBreakdown: BillingBreakdownDto? = null,
+    @SerializedName("next_payment") val nextPayment: NextPaymentDto? = null,
+)
+
+data class BillPayStatusResp(
+    val success: Boolean = false,
+    @SerializedName("payment_status") val paymentStatus: String? = null,
+    val paid: Boolean? = null,
+    val order: OrderDto? = null,
+    val payment: WalletPaymentDto? = null,
+    @SerializedName("status_langganan") val statusLangganan: String? = null,
+    @SerializedName("expired_at") val expiredAt: String? = null,
+    val message: String? = null,
+    val code: String? = null,
+    val error: String? = null,
 )
 
 // ---- Denda keterlambatan ----
 data class LatePenaltyResp(
     val success: Boolean = false,
-    val activation: ActivationDto? = null,
+    @SerializedName("late_penalty") val latePenalty: LatePenaltyDto? = null,
     val amounts: BillAmountsDto? = null,
+    @SerializedName("bill_profile") val billProfile: BillProfileDto? = null,
+    @SerializedName("billing_breakdown") val billingBreakdown: BillingBreakdownDto? = null,
     val message: String? = null,
 )
 
@@ -276,6 +364,7 @@ data class UpgradeReq(
 // ---- Metode pembayaran ----
 data class PaymentMethodsResp(
     val success: Boolean = false,
+    @SerializedName("qris_enabled") val qrisEnabled: Boolean? = null,
     @SerializedName("payment_methods") val paymentMethods: List<PayChannelDto> = emptyList(),
 )
 
@@ -283,11 +372,13 @@ data class PayChannelDto(
     val method: String? = null,
     val label: String? = null,
     val type: String? = null,
+    @SerializedName("pay_channel") val payChannel: String? = null,
     val accounts: List<BankAccountDto>? = null,
     @SerializedName("merchant_name") val merchantName: String? = null,
     val phone: String? = null,
     @SerializedName("qr_image_url") val qrImageUrl: String? = null,
     val note: String? = null,
+    @SerializedName("expire_minutes") val expireMinutes: Int? = null,
 )
 
 data class BankAccountDto(
@@ -308,6 +399,7 @@ data class OrderResp(
     val message: String? = null,
     val code: String? = null,
     val order: OrderDto? = null,
+    val payment: WalletPaymentDto? = null,
     @SerializedName("preview_renewal") val previewRenewal: PreviewRenewalDto? = null,
 )
 
@@ -323,6 +415,7 @@ data class OrderDto(
     val amount: Long? = null,
     @SerializedName("payment_method") val paymentMethod: String? = null,
     @SerializedName("payment_instruction") val paymentInstruction: PayChannelDto? = null,
+    val payment: WalletPaymentDto? = null,
     val status: String? = null,
     @SerializedName("status_label") val statusLabel: String? = null,
     @SerializedName("reference_no") val referenceNo: String? = null,
@@ -333,8 +426,12 @@ data class OrderDto(
     @SerializedName("paid_at") val paidAt: String? = null,
     @SerializedName("processed_at") val processedAt: String? = null,
     @SerializedName("created_at") val createdAt: String? = null,
+    @SerializedName("expires_at") val expiresAt: String? = null,
     val activation: ActivationDto? = null,
     val amounts: BillAmountsDto? = null,
+    @SerializedName("late_penalty") val latePenalty: LatePenaltyDto? = null,
+    @SerializedName("amount_breakdown") val amountBreakdown: BillAmountsDto? = null,
+    @SerializedName("billing_breakdown") val billingBreakdown: BillingBreakdownDto? = null,
 )
 
 data class OrderConfirmReq(

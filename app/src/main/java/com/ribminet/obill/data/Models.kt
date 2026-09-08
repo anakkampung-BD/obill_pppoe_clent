@@ -24,6 +24,7 @@ data class UserProfile(
     val activeUntil: String,
     val nextDueDate: String,
     val photoUrl: String = "",
+    val walletBalance: Long = 0L,
 )
 
 data class InternetPackage(

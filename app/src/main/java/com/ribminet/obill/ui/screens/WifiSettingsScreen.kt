@@ -45,6 +45,8 @@ import com.ribminet.obill.ui.components.SectionLabel
 import com.ribminet.obill.ui.components.ShimmerBox
 import com.ribminet.obill.ui.components.SweetAlertDialog
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.CardWhite
 import com.ribminet.obill.ui.theme.DangerRed
@@ -99,7 +101,7 @@ fun WifiSettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
                     } else {
                         Text(device?.ssid?.takeIf { it.isNotBlank() } ?: "-", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
                         Text(
-                            "${device?.connectedDevices ?: vm.deviceClients.size} perangkat terhubung",
+                            "${vm.lanClients.size} perangkat terhubung",
                             color = TextSecondary, fontSize = 12.sp
                         )
                     }
@@ -111,7 +113,7 @@ fun WifiSettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ActionCard(
-                    "Refresh Data", Icons.Filled.Refresh, BrandBlue, Modifier.weight(1f),
+                    "Refresh Data", Icons.Filled.Refresh, BrandBlue, Modifier.weight(1f).guideTarget(GuideTarget.WIFI_ACTIONS),
                     enabled = !vm.deviceActionRunning
                 ) { vm.refreshDevice() }
                 ActionCard(
@@ -121,6 +123,7 @@ fun WifiSettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(20.dp))
+            Column(modifier = Modifier.guideTarget(GuideTarget.WIFI_FORM)) {
             SectionLabel("Ubah Nama WiFi (SSID)")
             Spacer(Modifier.height(10.dp))
             AppTextField(ssid, { ssid = it }, "Nama WiFi", leadingIcon = Icons.Filled.Wifi)
@@ -129,6 +132,7 @@ fun WifiSettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             SectionLabel("Ubah Password WiFi")
             Spacer(Modifier.height(10.dp))
             AppTextField(password, { password = it }, "Min. 8 karakter (kosongkan jika tidak diubah)", leadingIcon = Icons.Filled.Lock, isPassword = true)
+            }
 
             Spacer(Modifier.height(16.dp))
             Box(
@@ -146,8 +150,8 @@ fun WifiSettingsScreen(vm: AppViewModel, onBack: () -> Unit) {
             }
         }
         Column(modifier = Modifier
-            .background(ScreenBackground)
-            .padding(16.dp)) {
+            .padding(16.dp)
+            .guideTarget(GuideTarget.WIFI_SAVE)) {
             PrimaryButton(
                 text = if (vm.deviceActionRunning) "Memproses..." else "Terapkan Perubahan",
                 enabled = !vm.deviceActionRunning,

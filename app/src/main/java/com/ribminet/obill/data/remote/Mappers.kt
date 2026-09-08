@@ -48,6 +48,7 @@ fun rateToSpeed(rate: String?): String {
 fun CustomerDto.toUserProfile(): UserProfile {
     val filled = listOf(customerName, phone, email, address).count { !it.isNullOrBlank() }
     val completion = ((filled / 4f) * 100).toInt()
+    val balance = walletBalance ?: 0L
     return UserProfile(
         fullName = customerName ?: "-",
         customerId = customerCode ?: usernamePppoe ?: "-",
@@ -66,6 +67,7 @@ fun CustomerDto.toUserProfile(): UserProfile {
         activeUntil = formatDateId(expiredAt),
         nextDueDate = formatDateId(nextPayment?.dueDate ?: expiredAt),
         photoUrl = photoProfileUrl ?: "",
+        walletBalance = balance,
     )
 }
 
@@ -99,13 +101,14 @@ fun PayChannelDto.toPaymentMethodOption(): PaymentMethodOption {
     val group = when (type) {
         "cash" -> "TUNAI"
         "bank_transfer" -> "TRANSFER BANK"
-        "qris", "qr" -> "QRIS DANA"
+        "qris_dinamis" -> "QRIS"
+        "qris", "qr" -> "QRIS"
         else -> "LAINNYA"
     }
     val short = when (type) {
         "cash" -> "CASH"
         "bank_transfer" -> "BANK"
-        "qris", "qr" -> "DANA"
+        "qris_dinamis", "qris", "qr" -> "QRIS"
         else -> (method ?: "").uppercase()
     }
 
@@ -128,8 +131,13 @@ fun PayChannelDto.toPaymentMethodOption(): PaymentMethodOption {
             }
             iconKey = brandIconKey(banks.firstOrNull() ?: method)
         }
+        "qris_dinamis" -> {
+            name = label ?: "QRIS"
+            subtitle = merchantName?.takeIf { it.isNotBlank() }.orEmpty()
+            iconKey = "dana"
+        }
         "qris", "qr" -> {
-            name = label ?: "QRIS DANA"
+            name = label ?: "QRIS"
             subtitle = merchantName?.takeIf { it.isNotBlank() }.orEmpty()
             iconKey = "dana"
         }

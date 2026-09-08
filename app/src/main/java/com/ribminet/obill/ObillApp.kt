@@ -15,14 +15,12 @@ class ObillApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        // OneSignal wajib di-init sedini mungkin (sebelum Activity).
         OneSignalManager.init(this, OneSignalConfig.APP_ID)
         val tokenStore = TokenStore(this)
         val api = ApiClient.create(tokenStore)
         repository = CustomerRepository(api, tokenStore)
     }
 
-    /** Nama versi aplikasi terpasang (mis. "3.0.0"). */
     fun appVersionName(): String = try {
         packageManager.getPackageInfo(packageName, 0).versionName ?: "0.0.0"
     } catch (e: Exception) {

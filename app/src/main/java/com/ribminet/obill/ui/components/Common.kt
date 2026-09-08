@@ -100,7 +100,7 @@ fun IconButtonRound(
         modifier = modifier
             .size(40.dp)
             .clip(CircleShape)
-            .clickableNoRipple(onClick),
+            .clickableRipple(bounded = false, radius = 22.dp, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Icon(icon, contentDescription = null, tint = tint)
@@ -112,15 +112,17 @@ fun PrimaryButton(
     text: String,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    fillMaxWidth: Boolean = true,
     onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier
-            .fillMaxWidth()
-            .height(54.dp),
-        shape = RoundedCornerShape(14.dp),
+            .then(if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier)
+            .height(38.dp),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = BrandBlue,
             contentColor = OnAccent,
@@ -128,7 +130,7 @@ fun PrimaryButton(
             disabledContentColor = OnAccent,
         )
     ) {
-        Text(text, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        Text(text, fontWeight = FontWeight.Bold, fontSize = 12.sp)
     }
 }
 
@@ -142,16 +144,17 @@ fun SecondaryButton(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.height(50.dp),
-        shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.5.dp, color),
+        modifier = modifier.height(36.dp),
+        shape = RoundedCornerShape(10.dp),
+        border = BorderStroke(1.25.dp, color),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = color)
     ) {
         if (icon != null) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(15.dp))
+            Spacer(Modifier.width(5.dp))
         }
-        Text(text, fontWeight = FontWeight.SemiBold)
+        Text(text, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
     }
 }
 

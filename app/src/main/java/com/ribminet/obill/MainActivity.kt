@@ -15,22 +15,28 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.ribminet.obill.data.local.OnboardingPrefs
 import com.ribminet.obill.push.NotificationHelper
 import com.ribminet.obill.push.OneSignalManager
+import com.ribminet.obill.ui.components.AnnouncementDialog
+import com.ribminet.obill.ui.components.AppBackground
 import com.ribminet.obill.ui.components.SweetAlertDialog
 import com.ribminet.obill.ui.components.UpdateDialog
 import com.ribminet.obill.ui.navigation.AppNavGraph
 import com.ribminet.obill.ui.screens.PermissionOnboardingScreen
 import com.ribminet.obill.ui.screens.SplashScreen
 import com.ribminet.obill.ui.theme.RibmiNetTheme
-import com.ribminet.obill.ui.theme.ScreenBackground
 import kotlinx.coroutines.delay
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Splash sistem Android (tanpa ikon) langsung dilepas; logo ditampilkan di Compose.
+        val systemSplash = installSplashScreen()
+        systemSplash.setKeepOnScreenCondition { false }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent { App() }
@@ -77,18 +83,18 @@ fun App() {
 
         when (stage) {
             AppStage.SPLASH -> {
-                Surface(modifier = Modifier.fillMaxSize(), color = ScreenBackground) {
-                    SplashScreen()
-                }
+                SplashScreen()
                 return@RibmiNetTheme
             }
             AppStage.PERMISSIONS -> {
-                Surface(modifier = Modifier.fillMaxSize(), color = ScreenBackground) {
-                    PermissionOnboardingScreen(onDone = {
-                        onboarding.permissionsRequested = true
-                        OneSignalManager.requestPushPermission()
-                        stage = AppStage.READY
-                    })
+                AppBackground {
+                    Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
+                        PermissionOnboardingScreen(onDone = {
+                            onboarding.permissionsRequested = true
+                            OneSignalManager.requestPushPermission()
+                            stage = AppStage.READY
+                        })
+                    }
                 }
                 return@RibmiNetTheme
             }
@@ -101,8 +107,10 @@ fun App() {
 
         LaunchedEffect(Unit) { vm.checkForUpdate() }
 
-        Surface(modifier = Modifier.fillMaxSize(), color = ScreenBackground) {
-            AppNavGraph(vm)
+        AppBackground {
+            Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
+                AppNavGraph(vm)
+            }
         }
 
         UpdateDialog(
@@ -121,7 +129,19 @@ fun App() {
             onDismiss = { vm.dismissUpdate() },
         )
 
+        // Pengumuman admin — di atas notifikasi biasa; update dialog tetap prioritas lebih tinggi.
         if (vm.updateInfo == null) {
+            AnnouncementDialog(
+                announcements = vm.announcements.toList(),
+                visible = vm.announcementModalVisible && vm.guideSession == null,
+                initialId = vm.announcementModalStartId,
+                markingRead = vm.announcementMarkingRead,
+                onMarkRead = { vm.markAnnouncementRead(it) },
+                onClose = { vm.dismissAnnouncement() },
+            )
+        }
+
+        if (vm.updateInfo == null && !vm.announcementModalVisible) {
             SweetAlertDialog(alert = vm.billingReminder, onConfirm = { vm.dismissBillingReminder() })
             SweetAlertDialog(
                 alert = vm.notificationPopup,

@@ -42,6 +42,8 @@ import com.ribminet.obill.ui.components.ConfirmRequest
 import com.ribminet.obill.ui.components.StatusBadge
 import com.ribminet.obill.ui.components.SweetAlertDialog
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.BrandBlueSurface
 import com.ribminet.obill.ui.theme.CardWhite
@@ -78,7 +80,10 @@ fun ChangePackageScreen(
         when {
             loading && packages.isEmpty() -> LoadingState()
             error != null && packages.isEmpty() -> ErrorState(error)
-            else -> LazyColumn(contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp)) {
+            else -> LazyColumn(
+                modifier = Modifier.guideTarget(GuideTarget.CHANGE_PACKAGE_LIST),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            ) {
                 if (pendingChange != null) {
                     item {
                         PendingChangeCard(pendingChange, submitting) {
@@ -237,7 +242,11 @@ private fun PackageCard(pkg: InternetPackage, isPendingTarget: Boolean, onSelect
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(pkg.name, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
-                Text(pkg.speed, color = TextSecondary, fontSize = 13.sp)
+                Spacer(Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.Bottom) {
+                    Text(rupiah(pkg.price), color = BrandBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text(" /bln", color = TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(bottom = 2.dp))
+                }
             }
             when {
                 isPendingTarget -> StatusBadge("Terjadwal", WarningSurface, WarningOrange)
@@ -253,26 +262,17 @@ private fun PackageCard(pkg: InternetPackage, isPendingTarget: Boolean, onSelect
                 Text(f, color = TextSecondary, fontSize = 13.sp)
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(rupiah(pkg.price), color = BrandBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(" /bln", color = TextSecondary, fontSize = 13.sp, modifier = Modifier.padding(bottom = 2.dp))
-            }
-            if (!pkg.current && !isPendingTarget) {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(BrandBlue)
-                        .clickableNoRipple { onSelect(pkg) }
-                        .padding(horizontal = 20.dp, vertical = 10.dp)
-                ) {
-                    Text("Ajukan", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
+        if (!pkg.current && !isPendingTarget) {
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(BrandBlue)
+                    .clickableNoRipple { onSelect(pkg) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp)
+            ) {
+                Text("Ajukan", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
             }
         }
     }

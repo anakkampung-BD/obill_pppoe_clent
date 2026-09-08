@@ -25,14 +25,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.ribminet.obill.data.remote.OrderDto
+import com.ribminet.obill.data.remote.HistoryOrderSource
+import com.ribminet.obill.data.remote.UnifiedHistoryItem
 import com.ribminet.obill.data.remote.formatDateTimeId
-import com.ribminet.obill.data.remote.orderTypeDisplay
-import com.ribminet.obill.data.remote.payableTotal
 import com.ribminet.obill.ui.components.AppCard
 import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.StatusBadge
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.DangerRed
 import com.ribminet.obill.ui.theme.DangerSurface
@@ -46,32 +47,58 @@ import com.ribminet.obill.util.rupiah
 
 @Composable
 fun OrdersScreen(
-    orders: List<OrderDto>,
+    items: List<UnifiedHistoryItem>,
     loading: Boolean,
+    error: String? = null,
     onBack: () -> Unit,
-    onOpen: (OrderDto) -> Unit,
+    onOpen: (UnifiedHistoryItem) -> Unit,
+    guideMode: Boolean = false,
 ) {
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(title = "Riwayat Pesanan", onBack = onBack)
         when {
-            loading && orders.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            loading && items.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = BrandBlue)
             }
-            orders.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+            items.isEmpty() -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+                    .guideTarget(GuideTarget.ORDERS_LIST),
+                contentAlignment = Alignment.Center,
+            ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Filled.ReceiptLong, contentDescription = null, tint = TextSecondary, modifier = Modifier.height(48.dp))
                     Spacer(Modifier.height(12.dp))
-                    Text("Belum Ada Pesanan", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 14.sp)
+                    Text(
+                        if (guideMode) "Daftar Pesanan" else "Belum Ada Pesanan",
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                    )
                     Spacer(Modifier.height(4.dp))
-                    Text("Pesanan pembayaran dan upgrade paket akan tampil di sini.", color = TextSecondary, fontSize = 12.sp)
+                    Text(
+                        when {
+                            guideMode ->
+                                "Pesanan pembayaran PPPoE dan transaksi PPOB akan tampil di sini beserta statusnya. Ketuk item untuk membuka detail."
+                            !error.isNullOrBlank() -> error
+                            else ->
+                                "Pesanan pembayaran PPPoE dan transaksi PPOB akan tampil di sini."
+                        },
+                        color = if (!error.isNullOrBlank() && !guideMode) DangerRed else TextSecondary,
+                        fontSize = 12.sp,
+                    )
                 }
             }
             else -> LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .guideTarget(GuideTarget.ORDERS_LIST),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(orders) { order ->
-                    OrderRow(order, onClick = { onOpen(order) })
+                items(items, key = { it.key }) { item ->
+                    HistoryOrderRow(item, onClick = { onOpen(item) })
                 }
             }
         }
@@ -79,40 +106,92 @@ fun OrdersScreen(
 }
 
 @Composable
-private fun OrderRow(order: OrderDto, onClick: () -> Unit) {
+private fun HistoryOrderRow(item: UnifiedHistoryItem, onClick: () -> Unit) {
     Box(modifier = Modifier.clickableNoRipple(onClick)) {
         AppCard {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text(order.orderNo ?: "-", fontWeight = FontWeight.Bold, color = TextPrimary, fontSize = 13.sp)
-                StatusChip(order.status, order.statusLabel)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                    Text(
+                        item.title,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    SourceChip(item.source)
+                }
+                StatusChip(item.source, item.status, item.statusLabel)
             }
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(order.orderTypeDisplay(), color = TextSecondary, fontSize = 12.sp)
-                Text(rupiah(order.payableTotal()), fontWeight = FontWeight.Bold, color = BrandBlue, fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(item.subtitle, color = TextSecondary, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                Text(
+                    item.amount?.let { rupiah(it) } ?: "-",
+                    fontWeight = FontWeight.Bold,
+                    color = BrandBlue,
+                    fontSize = 13.sp,
+                )
             }
-            if (!order.createdAt.isNullOrBlank()) {
-                Spacer(Modifier.height(4.dp))
-                Text(formatDateTimeId(order.createdAt), color = TextSecondary, fontSize = 11.sp)
+            if (!item.createdAt.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(formatDateTimeId(item.createdAt), color = TextSecondary, fontSize = 11.sp)
             }
         }
     }
 }
 
 @Composable
-private fun StatusChip(status: String?, label: String?) {
-    val (bg, fg) = when (status) {
-        "confirmed", "paid" -> SuccessSurface to SuccessGreen
-        "awaiting_confirmation" -> WarningSurface to WarningOrange
-        "rejected", "cancelled" -> DangerSurface to DangerRed
-        else -> WarningSurface to WarningOrange
+private fun SourceChip(source: HistoryOrderSource) {
+    val label = when (source) {
+        HistoryOrderSource.PPPOE -> "PPPoE"
+        HistoryOrderSource.PPOB -> "PPOB"
     }
-    val text = label ?: when (status) {
-        "confirmed", "paid" -> "Berhasil"
-        "awaiting_confirmation" -> "Menunggu Konfirmasi"
-        "rejected" -> "Ditolak"
-        "cancelled" -> "Dibatalkan"
-        else -> "Menunggu Pembayaran"
+    Text(
+        label,
+        color = BrandBlue,
+        fontSize = 10.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(com.ribminet.obill.ui.theme.BrandBlueSurface)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+    )
+}
+
+@Composable
+private fun StatusChip(source: HistoryOrderSource, status: String?, label: String?) {
+    val normalized = status?.lowercase().orEmpty()
+    val (bg, fg) = when (source) {
+        HistoryOrderSource.PPPOE -> when (status) {
+            "confirmed", "paid" -> SuccessSurface to SuccessGreen
+            "awaiting_confirmation" -> WarningSurface to WarningOrange
+            "rejected", "cancelled" -> DangerSurface to DangerRed
+            else -> WarningSurface to WarningOrange
+        }
+        HistoryOrderSource.PPOB -> when {
+            label.equals("Berhasil", true) || normalized in setOf("sukses", "paid", "success") ->
+                SuccessSurface to SuccessGreen
+            label?.contains("Batal", true) == true ||
+                normalized.contains("cancel") || normalized.contains("gagal") ||
+                normalized.contains("expired") ->
+                DangerSurface to DangerRed
+            else -> WarningSurface to WarningOrange
+        }
+    }
+    val text = label ?: when (source) {
+        HistoryOrderSource.PPPOE -> when (status) {
+            "confirmed", "paid" -> "Berhasil"
+            "awaiting_confirmation" -> "Menunggu Konfirmasi"
+            "rejected" -> "Ditolak"
+            "cancelled" -> "Dibatalkan"
+            else -> "Menunggu Pembayaran"
+        }
+        HistoryOrderSource.PPOB -> status ?: "Diproses"
     }
     StatusBadge(text, bg, fg)
 }

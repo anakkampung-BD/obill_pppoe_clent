@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,11 +39,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ribminet.obill.data.PaymentMethodOption
 import com.ribminet.obill.data.remote.BillDto
+import com.ribminet.obill.data.remote.creditApplied
+import com.ribminet.obill.data.remote.creditNote
 import com.ribminet.obill.data.remote.installationFeeAmount
 import com.ribminet.obill.data.remote.installationFeeLabel
 import com.ribminet.obill.data.remote.latePenaltyAmount
+import com.ribminet.obill.data.remote.latePenaltyLabel
 import com.ribminet.obill.data.remote.payableTotal
+import com.ribminet.obill.data.remote.periodLabel
 import com.ribminet.obill.data.remote.subscriptionAmount
+import com.ribminet.obill.data.remote.subscriptionGross
 import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.BillAmountBreakdown
 import com.ribminet.obill.ui.components.ConfirmDialog
@@ -50,6 +56,8 @@ import com.ribminet.obill.ui.components.ConfirmRequest
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SectionLabel
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.BrandBlueSurface
 import com.ribminet.obill.ui.theme.CardWhite
@@ -76,6 +84,20 @@ fun PaymentMethodScreen(
     var confirm by remember { mutableStateOf<ConfirmRequest?>(null) }
     val grouped = methods.groupBy { it.group }
     val expanded = remember { mutableStateMapOf<String, Boolean>().apply { grouped.keys.forEach { put(it, true) } } }
+    val qrisOnly = methods.size == 1 && (
+        methods.first().id.equals("qris_dinamis", true) ||
+            methods.first().group.equals("QRIS", true)
+        )
+
+    LaunchedEffect(methods) {
+        if (methods.isEmpty()) {
+            selected = null
+            return@LaunchedEffect
+        }
+        if (selected == null || methods.none { it.id == selected?.id }) {
+            selected = methods.firstOrNull { it.id.equals("qris_dinamis", true) } ?: methods.first()
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(
@@ -89,6 +111,7 @@ fun PaymentMethodScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
+                .guideTarget(GuideTarget.PAYMENT_METHODS_LIST)
         ) {
             Box(
                 modifier = Modifier
@@ -112,9 +135,14 @@ fun PaymentMethodScreen(
                         BillAmountBreakdown(
                             subscriptionLabel = "Biaya berlangganan — $packageLabel",
                             subscriptionAmount = bill.subscriptionAmount(),
+                            subscriptionGross = bill.subscriptionGross(),
+                            creditApplied = bill.creditApplied(),
+                            creditNote = bill.creditNote(),
+                            periodLabel = bill.periodLabel(),
                             installationLabel = bill.installationFeeLabel(),
                             installationAmount = bill.installationFeeAmount(),
                             latePenaltyAmount = bill.latePenaltyAmount(),
+                            latePenaltyLabel = bill.latePenaltyLabel(),
                             totalAmount = bill.payableTotal(),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -128,7 +156,11 @@ fun PaymentMethodScreen(
             }
 
             Spacer(Modifier.height(20.dp))
-            Text("Pilih Metode Pembayaran", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(
+                if (qrisOnly) "Metode Pembayaran" else "Pilih Metode Pembayaran",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+            )
             Spacer(Modifier.height(8.dp))
 
             if (loading && methods.isEmpty()) {
@@ -177,20 +209,24 @@ fun PaymentMethodScreen(
 
         Box(
             modifier = Modifier
-                .background(ScreenBg())
                 .padding(16.dp)
+                .guideTarget(GuideTarget.PAYMENT_CONTINUE)
         ) {
             PrimaryButton(
-                text = if (submitting) "Memproses..." else "Lanjutkan Pembayaran",
+                text = if (submitting) "Memproses..." else "Bayar",
                 enabled = selected != null && !submitting,
                 onClick = {
                     selected?.let { m ->
-                        confirm = ConfirmRequest(
-                            title = "Buat Pesanan Pembayaran?",
-                            message = "Anda akan membuat pesanan sebesar ${com.ribminet.obill.util.rupiah(amount)} dengan metode ${m.name}. Lanjutkan?",
-                            confirmText = "Ya, Buat",
-                            onConfirm = { onPay(m) },
-                        )
+                        if (qrisOnly || m.id.equals("qris_dinamis", true)) {
+                            onPay(m)
+                        } else {
+                            confirm = ConfirmRequest(
+                                title = "Buat Pesanan Pembayaran?",
+                                message = "Anda akan membuat pesanan sebesar ${com.ribminet.obill.util.rupiah(amount)} dengan metode ${m.name}. Lanjutkan?",
+                                confirmText = "Ya, Buat",
+                                onConfirm = { onPay(m) },
+                            )
+                        }
                     }
                 }
             )
@@ -200,9 +236,6 @@ fun PaymentMethodScreen(
     ConfirmDialog(request = confirm, onDismiss = { confirm = null })
     com.ribminet.obill.ui.components.SweetAlertDialog(alert = alert, onConfirm = onDismissAlert)
 }
-
-@Composable
-private fun ScreenBg(): Color = com.ribminet.obill.ui.theme.ScreenBackground
 
 @Composable
 private fun MethodRow(method: PaymentMethodOption, selected: Boolean, onClick: () -> Unit) {

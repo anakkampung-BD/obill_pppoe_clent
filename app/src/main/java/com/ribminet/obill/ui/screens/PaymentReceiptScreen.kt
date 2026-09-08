@@ -124,7 +124,6 @@ fun PaymentReceiptScreen(
             }
         }
         Box(modifier = Modifier
-            .background(ScreenBackground)
             .padding(16.dp)) {
             PrimaryButton(text = "Bagikan Gambar Struk", onClick = onClose)
         }

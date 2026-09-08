@@ -49,6 +49,8 @@ import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SectionLabel
 import com.ribminet.obill.ui.components.SweetAlertDialog
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.BrandBlueDark
 import com.ribminet.obill.ui.theme.CardWhite
@@ -80,6 +82,7 @@ fun EditBiodataScreen(vm: AppViewModel, onBack: () -> Unit, onSaved: () -> Unit)
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
+                .guideTarget(GuideTarget.EDIT_BIODATA_FORM)
         ) {
             Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 Box(contentAlignment = Alignment.Center) {
@@ -149,8 +152,8 @@ fun EditBiodataScreen(vm: AppViewModel, onBack: () -> Unit, onSaved: () -> Unit)
             )
         }
         Column(modifier = Modifier
-            .background(ScreenBackground)
-            .padding(16.dp)) {
+            .padding(16.dp)
+            .guideTarget(GuideTarget.EDIT_BIODATA_SAVE)) {
             PrimaryButton(
                 text = if (vm.biodataSubmitting) "Menyimpan..." else "Simpan Perubahan",
                 enabled = !vm.biodataSubmitting && name.isNotBlank(),

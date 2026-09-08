@@ -26,6 +26,14 @@ object Routes {
     const val FIBER_MONITORING = "fiber_monitoring"
     const val HELP = "help"
     const val NOTIFICATIONS = "notifications"
+    const val PPOB = "ppob"
+    const val PPOB_HISTORY = "ppob_history"
+    const val PPOB_DETAIL = "ppob_detail/{refId}"
+    const val WALLET_TOPUP = "wallet_topup"
+
+    fun ppobDetail(refId: String) = "ppob_detail/$refId"
     const val TWO_FACTOR = "two_factor"
-    const val SIMPLE_DOC = "simple_doc"
+    const val LEGAL_DOC = "legal_doc/{docId}"
+
+    fun legalDoc(docId: String) = "legal_doc/$docId"
 }

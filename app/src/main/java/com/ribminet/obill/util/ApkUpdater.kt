@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.content.FileProvider
-import com.ribminet.obill.data.remote.UpdateConfig
+import com.ribminet.obill.data.remote.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -38,9 +38,8 @@ object ApkUpdater {
             val outFile = File(dir, "obill-update.apk")
 
             val builder = Request.Builder().url(url)
-            if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
-                builder.header("PRIVATE-TOKEN", UpdateConfig.ACCESS_TOKEN)
-            }
+            // GitHub: Bearer token (bila repo privat). Unduhan asset publik tidak perlu token.
+            UpdateChecker.applyAuth(builder)
             client.newCall(builder.build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 val body = resp.body ?: return@withContext null

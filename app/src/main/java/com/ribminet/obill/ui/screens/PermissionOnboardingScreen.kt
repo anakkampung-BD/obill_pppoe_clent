@@ -92,7 +92,6 @@ fun PermissionOnboardingScreen(onDone: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(ScreenBackground)
     ) {
         Column(
             modifier = Modifier
@@ -146,7 +145,6 @@ fun PermissionOnboardingScreen(onDone: () -> Unit) {
 
         Box(
             modifier = Modifier
-                .background(ScreenBackground)
                 .padding(16.dp)
         ) {
             Column {

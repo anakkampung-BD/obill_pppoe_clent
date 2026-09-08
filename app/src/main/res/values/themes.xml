@@ -1,7 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Splash sistem: latar sama AppBackground, tanpa ikon (hindari double logo). -->
+    <style name="Theme.RibmiNet.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_empty_icon</item>
+        <item name="windowSplashScreenIconBackgroundColor">@android:color/transparent</item>
+        <item name="postSplashScreenTheme">@style/Theme.RibmiNet</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
     <style name="Theme.RibmiNet" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:statusBarColor">@color/hero_green</item>
-        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

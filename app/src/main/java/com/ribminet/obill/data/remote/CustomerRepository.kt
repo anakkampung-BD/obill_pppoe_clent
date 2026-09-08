@@ -75,6 +75,22 @@ class CustomerRepository(
     suspend fun notificationsRead(id: Int? = null, ids: List<Int>? = null, all: Boolean = false): ApiResult<BaseResp> =
         safe { api.notificationsRead(NotificationsReadReq(id = id, ids = ids, all = if (all) true else null)) }
 
+    suspend fun announcements(): ApiResult<AnnouncementListResp> = safe { api.announcements() }
+
+    suspend fun announcementRead(
+        announcementId: Int,
+        readerKey: String? = null,
+        readerName: String? = null,
+    ): ApiResult<AnnouncementReadResp> = safe {
+        api.announcementRead(
+            AnnouncementReadReq(
+                announcementId = announcementId,
+                readerKey = readerKey?.takeIf { it.isNotBlank() },
+                readerName = readerName?.takeIf { it.isNotBlank() },
+            ),
+        )
+    }
+
     suspend fun me(): ApiResult<MeResp> = safe { api.me() }
 
     /**
@@ -165,10 +181,14 @@ class CustomerRepository(
 
     suspend fun activationInfo(): ApiResult<ActivationInfoResp> = safe { api.activationInfo() }
 
-    suspend fun latePenalty(): ApiResult<LatePenaltyResp> = safe { api.latePenalty() }
+    suspend fun latePenalty(paymentDate: String? = null, amount: Long? = null): ApiResult<LatePenaltyResp> =
+        safe { api.latePenalty(paymentDate, amount) }
 
-    suspend fun billPay(method: String, note: String? = null): ApiResult<BillPayResp> =
+    suspend fun billPay(method: String? = "qris_dinamis", note: String? = null): ApiResult<BillPayResp> =
         safe { api.billPay(BillPayReq(method, note)) }
+
+    suspend fun billPayStatus(orderNo: String? = null, orderId: Int? = null): ApiResult<BillPayStatusResp> =
+        safe { api.billPayStatus(orderNo, orderId) }
 
     suspend fun upgradeOptions(): ApiResult<UpgradeOptionsResp> = safe { api.upgradeOptions() }
 
@@ -200,6 +220,95 @@ class CustomerRepository(
 
     suspend fun orderCancel(orderId: Int): ApiResult<OrderResp> =
         safe { api.orderCancel(OrderCancelReq(orderId)) }
+
+    // ---- Wallet ----
+    suspend fun wallet(): ApiResult<WalletResp> = safe { api.wallet() }
+
+    suspend fun walletLedger(limit: Int = 50): ApiResult<WalletLedgerResp> =
+        safe { api.walletLedger(limit) }
+
+    suspend fun walletTopups(status: String? = null, limit: Int = 50): ApiResult<WalletTopupsListResp> =
+        safe { api.walletTopups(status, limit) }
+
+    suspend fun walletTopup(amount: Long): ApiResult<WalletTopupResp> =
+        safe { api.walletTopup(WalletTopupReq(amount)) }
+
+    suspend fun walletTopupStatus(topupCode: String): ApiResult<WalletTopupStatusResp> =
+        safe { api.walletTopupStatus(topupCode) }
+
+    suspend fun walletTopupCancel(topupCode: String): ApiResult<WalletTopupCancelResp> =
+        safe { api.walletTopupCancel(WalletTopupCancelReq(topupCode)) }
+
+    // ---- PPOB ----
+    suspend fun ppobCatalog(
+        cmd: String = "prepaid",
+        category: String? = null,
+        brand: String? = null,
+        type: String? = null,
+        code: String? = null,
+    ): ApiResult<PpobCatalogResp> = safe { api.ppobCatalog(cmd, category, brand, type, code) }
+
+    suspend fun ppobSyncStatus(): ApiResult<PpobSyncStatusResp> = safe { api.ppobSyncStatus() }
+
+    suspend fun ppobTopup(
+        buyerSkuCode: String,
+        customerNo: String,
+        productName: String? = null,
+    ): ApiResult<PpobTransactionResp> = safe {
+        api.ppobTopup(PpobTopupReq(buyerSkuCode, customerNo, productName))
+    }
+
+    suspend fun ppobInquiry(
+        buyerSkuCode: String,
+        customerNo: String,
+        productName: String? = null,
+    ): ApiResult<PpobTransactionResp> = safe {
+        api.ppobInquiry(PpobInquiryReq(buyerSkuCode, customerNo, productName))
+    }
+
+    suspend fun ppobPayPasca(
+        refId: String,
+        buyerSkuCode: String,
+        customerNo: String,
+    ): ApiResult<PpobTransactionResp> = safe {
+        api.ppobPayPasca(PpobPayPascaReq(refId, buyerSkuCode, customerNo))
+    }
+
+    suspend fun ppobQuote(
+        buyerSkuCode: String,
+        customerNo: String,
+    ): ApiResult<PpobQuoteResp> = safe {
+        api.ppobQuote(PpobQuoteReq(buyerSkuCode, customerNo))
+    }
+
+    suspend fun ppobCheckout(
+        buyerSkuCode: String,
+        customerNo: String,
+        productName: String? = null,
+    ): ApiResult<PpobCheckoutResp> = safe {
+        api.ppobCheckout(PpobCheckoutReq(buyerSkuCode, customerNo, productName))
+    }
+
+    suspend fun ppobPaymentStatus(refId: String): ApiResult<PpobPaymentStatusResp> =
+        safe { api.ppobPaymentStatus(refId) }
+
+    suspend fun ppobCancel(refId: String): ApiResult<PpobCancelResp> =
+        safe { api.ppobCancel(PpobCancelReq(refId)) }
+
+    suspend fun ppobTransaction(refId: String): ApiResult<PpobTransactionResp> =
+        safe { api.ppobTransaction(refId) }
+
+    suspend fun ppobTransactions(
+        limit: Int = 50,
+        offset: Int = 0,
+        status: String? = null,
+    ): ApiResult<PpobTransactionsResp> = safe { api.ppobTransactions(limit, offset, status) }
+
+    suspend fun legalIndex(): ApiResult<LegalIndexResp> = safe { api.legalIndex() }
+
+    suspend fun legalPrivacy(): ApiResult<LegalDocumentResp> = safe { api.legalPrivacy() }
+
+    suspend fun legalTerms(): ApiResult<LegalDocumentResp> = safe { api.legalTerms() }
 
     private suspend fun <T> safe(block: suspend () -> T): ApiResult<T> = withContext(Dispatchers.IO) {
         try {

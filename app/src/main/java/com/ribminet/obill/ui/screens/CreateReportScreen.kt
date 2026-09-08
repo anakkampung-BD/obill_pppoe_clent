@@ -45,6 +45,8 @@ import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.Dropdown
 import com.ribminet.obill.ui.components.PrimaryButton
 import com.ribminet.obill.ui.components.SweetAlertDialog
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.DangerRed
 import com.ribminet.obill.ui.theme.InfoBlueSurface
@@ -78,6 +80,7 @@ fun CreateReportScreen(
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
+                .guideTarget(GuideTarget.CREATE_REPORT_FORM),
         ) {
             Text("Sampaikan Kendala Anda", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(6.dp))
@@ -169,8 +172,8 @@ fun CreateReportScreen(
             }
         }
         Box(modifier = Modifier
-            .background(ScreenBackground)
-            .padding(16.dp)) {
+            .padding(16.dp)
+            .guideTarget(GuideTarget.CREATE_REPORT_SUBMIT)) {
             PrimaryButton(
                 text = if (vm.complaintSubmitting) "Mengirim..." else "Kirim Laporan",
                 enabled = !vm.complaintSubmitting && category.isNotEmpty() && description.isNotBlank(),

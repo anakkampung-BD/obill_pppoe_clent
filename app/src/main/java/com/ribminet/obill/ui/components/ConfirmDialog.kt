@@ -99,7 +99,7 @@ fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
                         .clip(RoundedCornerShape(12.dp))
                         .border(1.dp, Divider, RoundedCornerShape(12.dp))
                         .clickableNoRipple(onDismiss)
-                        .padding(vertical = 13.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(request.cancelText, color = TextSecondary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
@@ -114,7 +114,7 @@ fun ConfirmDialog(request: ConfirmRequest?, onDismiss: () -> Unit) {
                             onDismiss()
                             request.onConfirm()
                         }
-                        .padding(vertical = 13.dp),
+                        .padding(vertical = 8.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(request.confirmText, color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)

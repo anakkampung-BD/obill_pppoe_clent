@@ -46,6 +46,12 @@ interface CustomerApi {
     @POST("api/customer/langganan/notifications_read")
     suspend fun notificationsRead(@Body body: NotificationsReadReq): BaseResp
 
+    @GET("api/customer/langganan/announcements")
+    suspend fun announcements(): AnnouncementListResp
+
+    @POST("api/customer/langganan/announcement_read")
+    suspend fun announcementRead(@Body body: AnnouncementReadReq): AnnouncementReadResp
+
     @GET("api/customer/langganan/me")
     suspend fun me(): MeResp
 
@@ -92,10 +98,19 @@ interface CustomerApi {
     suspend fun activationInfo(): ActivationInfoResp
 
     @GET("api/customer/langganan/late_penalty")
-    suspend fun latePenalty(): LatePenaltyResp
+    suspend fun latePenalty(
+        @Query("payment_date") paymentDate: String? = null,
+        @Query("amount") amount: Long? = null,
+    ): LatePenaltyResp
 
     @POST("api/customer/langganan/bill_pay")
     suspend fun billPay(@Body body: BillPayReq): BillPayResp
+
+    @GET("api/customer/langganan/bill_pay_status")
+    suspend fun billPayStatus(
+        @Query("order_no") orderNo: String? = null,
+        @Query("order_id") orderId: Int? = null,
+    ): BillPayStatusResp
 
     @GET("api/customer/langganan/upgrade_options")
     suspend fun upgradeOptions(): UpgradeOptionsResp
@@ -129,4 +144,80 @@ interface CustomerApi {
 
     @POST("api/customer/langganan/order_cancel")
     suspend fun orderCancel(@Body body: OrderCancelReq): OrderResp
+
+    // ---- Wallet / saldo ----
+    @GET("api/customer/langganan/wallet")
+    suspend fun wallet(): WalletResp
+
+    @GET("api/customer/langganan/wallet_ledger")
+    suspend fun walletLedger(@Query("limit") limit: Int = 50): WalletLedgerResp
+
+    @GET("api/customer/langganan/wallet_topups")
+    suspend fun walletTopups(
+        @Query("status") status: String? = null,
+        @Query("limit") limit: Int = 50,
+    ): WalletTopupsListResp
+
+    @POST("api/customer/langganan/wallet_topup")
+    suspend fun walletTopup(@Body body: WalletTopupReq): WalletTopupResp
+
+    @GET("api/customer/langganan/wallet_topup_status")
+    suspend fun walletTopupStatus(@Query("topup_code") topupCode: String): WalletTopupStatusResp
+
+    @POST("api/customer/langganan/wallet_topup_cancel")
+    suspend fun walletTopupCancel(@Body body: WalletTopupCancelReq): WalletTopupCancelResp
+
+    // ---- PPOB (via server Obill) ----
+    @GET("api/customer/ppob/catalog")
+    suspend fun ppobCatalog(
+        @Query("cmd") cmd: String = "prepaid",
+        @Query("category") category: String? = null,
+        @Query("brand") brand: String? = null,
+        @Query("type") type: String? = null,
+        @Query("code") code: String? = null,
+    ): PpobCatalogResp
+
+    @GET("api/customer/ppob/sync_status")
+    suspend fun ppobSyncStatus(): PpobSyncStatusResp
+
+    @POST("api/customer/ppob/topup")
+    suspend fun ppobTopup(@Body body: PpobTopupReq): PpobTransactionResp
+
+    @POST("api/customer/ppob/inquiry")
+    suspend fun ppobInquiry(@Body body: PpobInquiryReq): PpobTransactionResp
+
+    @POST("api/customer/ppob/pay_pasca")
+    suspend fun ppobPayPasca(@Body body: PpobPayPascaReq): PpobTransactionResp
+
+    @POST("api/customer/ppob/quote")
+    suspend fun ppobQuote(@Body body: PpobQuoteReq): PpobQuoteResp
+
+    @POST("api/customer/ppob/checkout")
+    suspend fun ppobCheckout(@Body body: PpobCheckoutReq): PpobCheckoutResp
+
+    @GET("api/customer/ppob/payment_status")
+    suspend fun ppobPaymentStatus(@Query("ref_id") refId: String): PpobPaymentStatusResp
+
+    @POST("api/customer/ppob/cancel")
+    suspend fun ppobCancel(@Body body: PpobCancelReq): PpobCancelResp
+
+    @GET("api/customer/ppob/transaction")
+    suspend fun ppobTransaction(@Query("ref_id") refId: String): PpobTransactionResp
+
+    @GET("api/customer/ppob/transactions")
+    suspend fun ppobTransactions(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+        @Query("status") status: String? = null,
+    ): PpobTransactionsResp
+
+    // ---- Legal (publik) ----
+    @GET("api/legal")
+    suspend fun legalIndex(): LegalIndexResp
+
+    @GET("api/legal/privacy")
+    suspend fun legalPrivacy(): LegalDocumentResp
+
+    @GET("api/legal/terms")
+    suspend fun legalTerms(): LegalDocumentResp
 }

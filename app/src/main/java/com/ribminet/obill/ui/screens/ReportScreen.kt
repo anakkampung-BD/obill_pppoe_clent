@@ -54,6 +54,8 @@ import com.ribminet.obill.data.Complaint
 import com.ribminet.obill.data.ComplaintStatus
 import com.ribminet.obill.ui.components.IconButtonRound
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.GuideTarget
+import com.ribminet.obill.ui.guide.guideTarget
 import com.ribminet.obill.ui.theme.AppThemeState
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.CardWhite
@@ -230,6 +232,7 @@ fun ReportScreen(
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(20.dp)
+                    .guideTarget(GuideTarget.REPORT_FAB),
             ) {
                 Icon(Icons.Filled.Add, contentDescription = "Buat Laporan")
             }

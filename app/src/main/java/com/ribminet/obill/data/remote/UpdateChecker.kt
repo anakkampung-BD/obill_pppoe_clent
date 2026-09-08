@@ -8,7 +8,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
 
-/** Info rilis terbaru hasil pengecekan ke GitLab Releases. */
+/** Info rilis terbaru hasil pengecekan ke GitHub Releases. */
 data class ReleaseInfo(
     val versionName: String,
     val notes: String,
@@ -16,27 +16,18 @@ data class ReleaseInfo(
     val pageUrl: String,
 )
 
-private data class GitlabAssetLinkDto(
+private data class GithubAssetDto(
     val name: String? = null,
-    val url: String? = null,
-    @SerializedName("direct_asset_url") val directAssetUrl: String? = null,
-    @SerializedName("link_type") val linkType: String? = null,
+    @SerializedName("browser_download_url") val browserDownloadUrl: String? = null,
+    @SerializedName("content_type") val contentType: String? = null,
 )
 
-private data class GitlabAssetsDto(
-    val links: List<GitlabAssetLinkDto> = emptyList(),
-)
-
-private data class GitlabLinksDto(
-    val self: String? = null,
-)
-
-private data class GitlabReleaseDto(
+private data class GithubReleaseDto(
     @SerializedName("tag_name") val tagName: String? = null,
     val name: String? = null,
-    val description: String? = null,
-    val assets: GitlabAssetsDto? = null,
-    @SerializedName("_links") val links: GitlabLinksDto? = null,
+    val body: String? = null,
+    @SerializedName("html_url") val htmlUrl: String? = null,
+    val assets: List<GithubAssetDto> = emptyList(),
 )
 
 object UpdateChecker {
@@ -54,7 +45,7 @@ object UpdateChecker {
         try {
             fetchFromUrl(UpdateConfig.latestReleaseApi)
                 ?: fetchLatestFromList()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             null
         }
     }
@@ -66,40 +57,48 @@ object UpdateChecker {
 
     private fun fetchLatestFromList(): ReleaseInfo? {
         val body = getBody(UpdateConfig.releasesApi) ?: return null
-        val list = gson.fromJson(body, Array<GitlabReleaseDto>::class.java) ?: return null
+        val list = gson.fromJson(body, Array<GithubReleaseDto>::class.java) ?: return null
         return list.firstOrNull()?.toReleaseInfo()
     }
 
-    private fun getReleaseDto(url: String): GitlabReleaseDto? {
+    private fun getReleaseDto(url: String): GithubReleaseDto? {
         val body = getBody(url) ?: return null
-        return gson.fromJson(body, GitlabReleaseDto::class.java)
+        return gson.fromJson(body, GithubReleaseDto::class.java)
     }
 
     private fun getBody(url: String): String? {
-        val builder = Request.Builder().url(url).header("Accept", "application/json")
-        if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
-            builder.header("PRIVATE-TOKEN", UpdateConfig.ACCESS_TOKEN)
-        }
+        val builder = Request.Builder()
+            .url(url)
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "Obill-Android-Updater")
+            .header("X-GitHub-Api-Version", "2022-11-28")
+        applyAuth(builder)
         client.newCall(builder.build()).execute().use { resp ->
             if (!resp.isSuccessful) return null
             return resp.body?.string()
         }
     }
 
-    private fun GitlabReleaseDto.toReleaseInfo(): ReleaseInfo? {
+    fun applyAuth(builder: Request.Builder) {
+        if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
+            builder.header("Authorization", "Bearer ${UpdateConfig.ACCESS_TOKEN}")
+        }
+    }
+
+    private fun GithubReleaseDto.toReleaseInfo(): ReleaseInfo? {
         val tag = tagName ?: return null
         val version = tag.removePrefix("v").trim()
         if (version.isBlank()) return null
-        val apkLink = assets?.links?.firstOrNull { link ->
-            link.name?.endsWith(".apk", ignoreCase = true) == true ||
-                link.directAssetUrl?.contains(".apk", ignoreCase = true) == true ||
-                link.url?.contains(".apk", ignoreCase = true) == true
+        val apkAsset = assets.firstOrNull { asset ->
+            asset.name?.endsWith(".apk", ignoreCase = true) == true ||
+                asset.contentType?.contains("android.package", ignoreCase = true) == true ||
+                asset.browserDownloadUrl?.contains(".apk", ignoreCase = true) == true
         }
-        val apkUrl = apkLink?.directAssetUrl ?: apkLink?.url
-        val page = links?.self ?: UpdateConfig.releasesPage
+        val apkUrl = apkAsset?.browserDownloadUrl
+        val page = htmlUrl?.takeIf { it.isNotBlank() } ?: UpdateConfig.releasesPage
         return ReleaseInfo(
             versionName = version,
-            notes = description?.trim().orEmpty(),
+            notes = body?.trim().orEmpty(),
             downloadUrl = apkUrl ?: page,
             pageUrl = page,
         )

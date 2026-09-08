@@ -45,7 +45,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import com.ribminet.obill.data.remote.NotificationDto
@@ -54,6 +56,7 @@ import com.ribminet.obill.ui.components.AppTopBar
 import com.ribminet.obill.ui.components.PullToRefresh
 import com.ribminet.obill.ui.components.SecondaryButton
 import com.ribminet.obill.ui.components.clickableNoRipple
+import com.ribminet.obill.ui.guide.UserGuides
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.CardWhite
 import com.ribminet.obill.ui.theme.IconChipBlue
@@ -67,19 +70,52 @@ private const val CS_PHONE = "082178277876"
 private const val CS_WA_INTL = "6282178277876"
 
 @Composable
-fun HelpScreen(onBack: () -> Unit) {
+fun HelpScreen(
+    onBack: () -> Unit,
+    onStartGuide: (guideId: String) -> Unit,
+) {
     val context = LocalContext.current
     val faq = listOf(
-        "Bagaimana cara masuk ke aplikasi?" to "Masukkan nomor WhatsApp yang terdaftar, lalu masukkan kode OTP yang dikirim ke WhatsApp Anda. Jika nomor belum terdaftar, hubungi admin.",
-        "Bagaimana cara membayar atau memperpanjang tagihan?" to "Buka menu Tagihan, tekan \"Bayar Tagihan\", pilih metode pembayaran (Tunai, Transfer Bank, atau QRIS), lalu buat pesanan. Setelah membayar, tekan \"Saya Sudah Bayar\" untuk konfirmasi.",
-        "Apa saja metode pembayaran yang tersedia?" to "Sesuai pengaturan admin: Tunai (bayar di kantor), Transfer Bank (ke rekening yang tertera), dan QRIS (scan kode QR). Pilihan yang muncul mengikuti yang diaktifkan admin.",
-        "Setelah konfirmasi bayar, apa langkah berikutnya?" to "Status pesanan menjadi \"Menunggu Konfirmasi\". Admin akan memverifikasi pembayaran Anda, lalu layanan diperpanjang otomatis dan status berubah menjadi \"Pembayaran Berhasil\".",
-        "Bagaimana cara upgrade paket?" to "Buka menu Ganti Paket, pilih paket tujuan, pilih metode pembayaran, lalu selesaikan pembayaran seperti tagihan biasa.",
-        "Bagaimana memeriksa status pesanan saya?" to "Buka Profil > Riwayat Pesanan untuk melihat semua pesanan beserta statusnya. Tarik layar ke bawah untuk menyegarkan.",
-        "Internet saya lambat atau mati, apa solusinya?" to "Cek status perangkat di Beranda. Coba Refresh atau Reboot perangkat di menu Pengaturan WiFi. Jika masih bermasalah, kirim pengaduan lewat menu Laporan.",
-        "Bagaimana mengubah nama (SSID) & password WiFi?" to "Buka menu Pengaturan WiFi, ubah nama SSID dan/atau password, lalu simpan. Perubahan dikirim ke perangkat Anda.",
-        "Bagaimana cara mengirim pengaduan?" to "Buka menu Laporan, tekan tombol tambah, isi kategori dan deskripsi keluhan, lampirkan foto bila perlu, lalu kirim. Pengaduan diteruskan ke admin via WhatsApp.",
-        "Bagaimana mengubah biodata saya?" to "Buka Profil > Edit Biodata. Anda dapat mengubah nama, email, alamat, dan foto profil. Nomor WhatsApp dan data paket hanya dapat diubah oleh admin.",
+        FaqEntry.Text(
+            question = "Bagaimana cara masuk ke aplikasi?",
+            answer = "Masukkan nomor WhatsApp yang terdaftar, lalu masukkan kode OTP yang dikirim ke WhatsApp Anda. Jika nomor belum terdaftar, hubungi admin.",
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana cara membayar atau memperpanjang tagihan?",
+            guideId = UserGuides.PAY_BILL,
+        ),
+        FaqEntry.Guide(
+            question = "Apa saja metode pembayaran yang tersedia?",
+            guideId = UserGuides.PAYMENT_METHODS,
+        ),
+        FaqEntry.Guide(
+            question = "Setelah konfirmasi bayar, apa langkah berikutnya?",
+            guideId = UserGuides.AFTER_PAY_CONFIRM,
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana cara upgrade paket?",
+            guideId = UserGuides.CHANGE_PACKAGE,
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana memeriksa status pesanan saya?",
+            guideId = UserGuides.ORDER_STATUS,
+        ),
+        FaqEntry.Guide(
+            question = "Internet saya lambat atau mati, apa solusinya?",
+            guideId = UserGuides.SLOW_INTERNET,
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana mengubah nama (SSID) & password WiFi?",
+            guideId = UserGuides.WIFI_SETTINGS,
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana cara mengirim pengaduan?",
+            guideId = UserGuides.SEND_COMPLAINT,
+        ),
+        FaqEntry.Guide(
+            question = "Bagaimana mengubah biodata saya?",
+            guideId = UserGuides.EDIT_BIODATA,
+        ),
     )
     Column(modifier = Modifier.fillMaxSize()) {
         AppTopBar(title = "FAQ & Kontak", onBack = onBack)
@@ -110,13 +146,24 @@ fun HelpScreen(onBack: () -> Unit) {
             Spacer(Modifier.height(20.dp))
             Text("Pertanyaan Umum (FAQ)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
             Spacer(Modifier.height(12.dp))
-            faq.forEach { (q, a) -> FaqItem(q, a); Spacer(Modifier.height(10.dp)) }
+            faq.forEach { entry ->
+                when (entry) {
+                    is FaqEntry.Text -> FaqTextItem(entry.question, entry.answer)
+                    is FaqEntry.Guide -> FaqGuideItem(entry.question) { onStartGuide(entry.guideId) }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
         }
     }
 }
 
+private sealed class FaqEntry {
+    data class Text(val question: String, val answer: String) : FaqEntry()
+    data class Guide(val question: String, val guideId: String) : FaqEntry()
+}
+
 @Composable
-private fun FaqItem(question: String, answer: String) {
+private fun FaqTextItem(question: String, answer: String) {
     var expanded by remember { mutableStateOf(false) }
     Column(
         modifier = Modifier
@@ -135,6 +182,34 @@ private fun FaqItem(question: String, answer: String) {
         if (expanded) {
             Spacer(Modifier.height(8.dp))
             Text(answer, color = TextSecondary, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun FaqGuideItem(question: String, onStart: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(CardWhite)
+            .clickableNoRipple(onStart)
+            .padding(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.PlayCircle, contentDescription = null, tint = BrandBlue, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(question, fontWeight = FontWeight.SemiBold, color = TextPrimary, fontSize = 14.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Ketuk untuk mulai panduan di aplikasi",
+                    color = BrandBlue,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                )
+            }
+            Icon(Icons.Filled.ChevronRight, contentDescription = null, tint = TextSecondary)
         }
     }
 }
@@ -268,28 +343,6 @@ fun TwoFactorScreen(onBack: () -> Unit) {
                     onCheckedChange = { enabled = it },
                     colors = SwitchDefaults.colors(checkedThumbColor = OnAccent, checkedTrackColor = BrandBlue)
                 )
-            }
-        }
-    }
-}
-
-@Composable
-fun SimpleDocScreen(title: String, onBack: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        AppTopBar(title = title, onBack = onBack)
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            repeat(5) { i ->
-                Text("${i + 1}. Ketentuan Layanan", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = TextPrimary)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "Dengan menggunakan layanan Ribmi Net, pelanggan menyetujui seluruh ketentuan yang berlaku terkait penggunaan layanan internet, penagihan, serta kebijakan data dan privasi yang ditetapkan oleh penyedia layanan.",
-                    color = TextSecondary, fontSize = 13.sp
-                )
-                Spacer(Modifier.height(16.dp))
             }
         }
     }
