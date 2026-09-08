@@ -145,7 +145,7 @@ class AppViewModel : ViewModel() {
             }
             updateDownloading = false
             if (file != null) {
-                updateInfo = null
+                // Jangan clear updateInfo — update wajib sampai versi baru terpasang.
                 ApkUpdater.installApk(ObillApp.instance, file)
             } else {
                 alert = AppAlert(
@@ -159,7 +159,8 @@ class AppViewModel : ViewModel() {
         }
     }
 
-    fun dismissUpdate() { updateInfo = null }
+    /** Tidak dipakai: update bersifat wajib dan tidak dapat ditunda. */
+    fun dismissUpdate() { /* no-op */ }
 
     // ---- Pengumuman admin (popup full + kartu beranda) ----
     private val announcementPrefs = AnnouncementPrefs(ObillApp.instance)

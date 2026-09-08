@@ -32,6 +32,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.ribminet.obill.data.remote.ReleaseInfo
 import com.ribminet.obill.ui.theme.BrandBlue
 import com.ribminet.obill.ui.theme.CardWhite
@@ -39,20 +40,27 @@ import com.ribminet.obill.ui.theme.OnAccent
 import com.ribminet.obill.ui.theme.TextPrimary
 import com.ribminet.obill.ui.theme.TextSecondary
 
+/** Modal update wajib — tidak bisa ditutup sampai pengguna memperbarui. */
 @Composable
 fun UpdateDialog(
     info: ReleaseInfo?,
     downloading: Boolean,
     progress: Float,
     onUpdate: (ReleaseInfo) -> Unit,
-    onDismiss: () -> Unit,
 ) {
     if (info == null) return
 
     val scale = remember { Animatable(0.7f) }
     LaunchedEffect(info) { scale.snapTo(0.7f); scale.animateTo(1f) }
 
-    Dialog(onDismissRequest = { if (!downloading) onDismiss() }) {
+    Dialog(
+        onDismissRequest = { /* wajib update — tidak bisa ditutup */ },
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = true,
+        ),
+    ) {
         Column(
             modifier = Modifier
                 .scale(scale.value)
@@ -74,7 +82,7 @@ fun UpdateDialog(
             }
             Spacer(Modifier.height(18.dp))
             Text(
-                "Pembaruan Tersedia",
+                "Pembaruan Wajib",
                 fontWeight = FontWeight.Bold,
                 fontSize = 14.sp,
                 color = TextPrimary,
@@ -82,7 +90,7 @@ fun UpdateDialog(
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "Versi ${info.versionName} sudah tersedia. Perbarui aplikasi untuk mendapatkan fitur dan perbaikan terbaru.",
+                "Versi ${info.versionName} sudah tersedia. Anda harus memperbarui aplikasi untuk terus menggunakannya.",
                 fontSize = 13.sp,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
@@ -143,16 +151,6 @@ fun UpdateDialog(
                 ) {
                     Text("Perbarui Sekarang", color = OnAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    "Nanti Saja",
-                    color = TextSecondary,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .clickableNoRipple(onDismiss)
-                        .padding(vertical = 6.dp)
-                )
             }
         }
     }

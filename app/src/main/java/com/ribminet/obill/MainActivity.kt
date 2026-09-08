@@ -120,7 +120,6 @@ fun App() {
                 // Update sepenuhnya in-app (unduh APK + installer). Tidak buka browser.
                 vm.downloadAndInstallUpdate()
             },
-            onDismiss = { vm.dismissUpdate() },
         )
 
         // Pengumuman admin — di atas notifikasi biasa; update dialog tetap prioritas lebih tinggi.
