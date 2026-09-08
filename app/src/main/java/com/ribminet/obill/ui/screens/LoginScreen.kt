@@ -180,6 +180,19 @@ private fun PhoneStep(vm: AppViewModel) {
             Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = BrandBlue, modifier = Modifier.size(22.dp))
             }
+        } else {
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Sudah terima kode OTP? Masukkan di sini",
+                color = BrandBlue,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickableNoRipple { vm.continueToOtpEntry() }
+                    .padding(vertical = 6.dp),
+            )
         }
     }
 }

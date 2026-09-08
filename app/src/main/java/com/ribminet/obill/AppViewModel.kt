@@ -867,17 +867,22 @@ class AppViewModel : ViewModel() {
                     }
                 }
                 is ApiResult.Err -> {
-                    // Server sering kirim WA dulu, baru balas HTTP. Timeout/rate-limit ≠ gagal kirim OTP.
-                    when (r.code) {
-                        "TIMEOUT", "NETWORK" -> {
+                    // Server sering kirim WA dulu, baru balas HTTP. Timeout/502/rate-limit ≠ gagal kirim OTP.
+                    val gateway = r.code == "GATEWAY" || r.httpCode in listOf(502, 503, 504)
+                    when {
+                        r.code == "TIMEOUT" || r.code == "NETWORK" || gateway -> {
                             otpStep = OtpStep.OTP
                             alert = AppAlert(
                                 AlertType.WARNING,
-                                if (r.code == "TIMEOUT") "Koneksi Lambat" else "Koneksi Terputus",
+                                when {
+                                    r.code == "TIMEOUT" -> "Koneksi Lambat"
+                                    gateway -> "Server Sibuk"
+                                    else -> "Koneksi Terputus"
+                                },
                                 "Jika kode OTP sudah masuk WhatsApp, masukkan di sini. Jika belum, ketuk Kirim Ulang.",
                             )
                         }
-                        "OTP_RATE_LIMITED" -> {
+                        r.code == "OTP_RATE_LIMITED" -> {
                             otpStep = OtpStep.OTP
                             alert = errToAlert(r)
                         }
@@ -924,6 +929,7 @@ class AppViewModel : ViewModel() {
             "INVALID_PHONE" -> "Nomor Tidak Valid"
             "NETWORK" -> "Koneksi Bermasalah"
             "TIMEOUT" -> "Koneksi Lambat"
+            "GATEWAY" -> "Server Sibuk"
             else -> "Gagal"
         }
         var msg = e.message
@@ -939,6 +945,16 @@ class AppViewModel : ViewModel() {
     fun resetAuth() {
         otpStep = OtpStep.PHONE
         alert = null
+    }
+
+    /** Lanjut ke form OTP bila kode sudah diterima di WhatsApp (mis. setelah error 502). */
+    fun continueToOtpEntry() {
+        if (phone.trim().length < 8) {
+            alert = AppAlert(AlertType.WARNING, "Nomor Tidak Valid", "Masukkan nomor WhatsApp terlebih dahulu.")
+            return
+        }
+        alert = null
+        otpStep = OtpStep.OTP
     }
 
     fun logout(onDone: () -> Unit) {

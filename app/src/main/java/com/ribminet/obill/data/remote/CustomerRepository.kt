@@ -17,20 +17,39 @@ class CustomerRepository(
 ) {
     private val gson = Gson()
 
+    companion object {
+        private val GATEWAY_HTTP = setOf(502, 503, 504)
+    }
+
     val isLoggedIn: Boolean get() = tokenStore.isLoggedIn
 
-    suspend fun requestOtp(phone: String): ApiResult<RequestOtpResp> =
-        safe { api.requestOtp(RequestOtpReq(phone)) }
+    suspend fun requestOtp(phone: String): ApiResult<RequestOtpResp> {
+        // Gateway 502/503/504 sering muncul saat server lambat kirim WhatsApp — coba ulang.
+        var last: ApiResult<RequestOtpResp> = safe { api.requestOtp(RequestOtpReq(phone)) }
+        repeat(2) { attempt ->
+            val err = last as? ApiResult.Err ?: return last
+            if (err.httpCode !in GATEWAY_HTTP) return last
+            kotlinx.coroutines.delay(1_500L * (attempt + 1))
+            last = safe { api.requestOtp(RequestOtpReq(phone)) }
+        }
+        return last
+    }
 
     suspend fun verifyOtp(phone: String, otp: String): ApiResult<VerifyOtpResp> {
-        val result = safe { api.verifyOtp(VerifyOtpReq(phone, otp)) }
-        if (result is ApiResult.Ok && !result.data.token.isNullOrBlank()) {
-            tokenStore.token = result.data.token
-            tokenStore.expiresAt = result.data.expiresAt
-            tokenStore.phone = phone
-            result.data.customer?.id?.let { tokenStore.customerId = it }
+        var last: ApiResult<VerifyOtpResp> = safe { api.verifyOtp(VerifyOtpReq(phone, otp)) }
+        repeat(2) { attempt ->
+            val err = last as? ApiResult.Err ?: return@repeat
+            if (err.httpCode !in GATEWAY_HTTP) return@repeat
+            kotlinx.coroutines.delay(1_200L * (attempt + 1))
+            last = safe { api.verifyOtp(VerifyOtpReq(phone, otp)) }
         }
-        return result
+        if (last is ApiResult.Ok && !last.data.token.isNullOrBlank()) {
+            tokenStore.token = last.data.token
+            tokenStore.expiresAt = last.data.expiresAt
+            tokenStore.phone = phone
+            last.data.customer?.id?.let { tokenStore.customerId = it }
+        }
+        return last
     }
 
     suspend fun logout(subscriptionId: String? = null): ApiResult<BaseResp> {
@@ -319,9 +338,18 @@ class CustomerRepository(
             val raw = try { e.response()?.errorBody()?.string() } catch (_: Exception) { null }
             val err = try { if (!raw.isNullOrBlank()) gson.fromJson(raw, ErrorResp::class.java) else null } catch (_: Exception) { null }
             if (e.code() == 401) tokenStore.clear()
+            val fallbackCode = when (e.code()) {
+                401 -> "UNAUTHORIZED"
+                502, 503, 504 -> "GATEWAY"
+                else -> null
+            }
+            val fallbackMessage = when (e.code()) {
+                502, 503, 504 -> "Server sedang sibuk (error ${e.code()}). Jika OTP sudah masuk WhatsApp, lanjutkan verifikasi."
+                else -> "Terjadi kesalahan (${e.code()})."
+            }
             ApiResult.Err(
-                message = err?.message ?: "Terjadi kesalahan (${e.code()}).",
-                code = err?.code ?: if (e.code() == 401) "UNAUTHORIZED" else null,
+                message = err?.message?.takeIf { it.isNotBlank() } ?: fallbackMessage,
+                code = err?.code ?: fallbackCode,
                 httpCode = e.code(),
                 retryAfterSeconds = err?.retryAfterSeconds,
                 remainingAttempts = err?.remainingAttempts,
