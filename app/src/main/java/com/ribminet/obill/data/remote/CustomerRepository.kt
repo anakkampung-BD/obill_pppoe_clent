@@ -43,13 +43,14 @@ class CustomerRepository(
             kotlinx.coroutines.delay(1_200L * (attempt + 1))
             last = safe { api.verifyOtp(VerifyOtpReq(phone, otp)) }
         }
-        if (last is ApiResult.Ok && !last.data.token.isNullOrBlank()) {
-            tokenStore.token = last.data.token
-            tokenStore.expiresAt = last.data.expiresAt
+        val result = last
+        if (result is ApiResult.Ok && !result.data.token.isNullOrBlank()) {
+            tokenStore.token = result.data.token
+            tokenStore.expiresAt = result.data.expiresAt
             tokenStore.phone = phone
-            last.data.customer?.id?.let { tokenStore.customerId = it }
+            result.data.customer?.id?.let { tokenStore.customerId = it }
         }
-        return last
+        return result
     }
 
     suspend fun logout(subscriptionId: String? = null): ApiResult<BaseResp> {
