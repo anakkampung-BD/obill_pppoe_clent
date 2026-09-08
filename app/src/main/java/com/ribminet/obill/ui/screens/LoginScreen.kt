@@ -233,12 +233,15 @@ private fun OtpStepContent(vm: AppViewModel, onLoggedIn: () -> Unit) {
                 fontSize = 13.sp,
                 modifier = Modifier.clickableNoRipple { vm.resetAuth() },
             )
+            val canResend = vm.otpResendRemaining <= 0 && !vm.authLoading
             Text(
-                "Kirim Ulang",
-                color = BrandBlue,
+                if (canResend) "Kirim Ulang" else "Kirim Ulang (${vm.otpResendRemaining}d)",
+                color = if (canResend) BrandBlue else TextSecondary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 13.sp,
-                modifier = Modifier.clickableNoRipple { vm.requestOtp() },
+                modifier = Modifier.clickableNoRipple {
+                    if (canResend) vm.requestOtp()
+                },
             )
         }
     }

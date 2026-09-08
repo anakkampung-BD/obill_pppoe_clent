@@ -85,9 +85,13 @@ class AppViewModel : ViewModel() {
     var phone by mutableStateOf(repo.tokenStore.phone ?: "")
     var otpTtlSeconds by mutableStateOf(300)
     var otpResendSeconds by mutableStateOf(60)
+    /** Sisa detik sebelum "Kirim Ulang" aktif. 0 = boleh kirim. */
+    var otpResendRemaining by mutableStateOf(0)
+        private set
     var otpLength by mutableStateOf(6)
     var authLoading by mutableStateOf(false)
         private set
+    private var otpResendJob: Job? = null
 
     // Notifikasi gaya SweetAlert (login & lainnya)
     var alert by mutableStateOf<AppAlert?>(null)
@@ -856,6 +860,7 @@ class AppViewModel : ViewModel() {
                     if (r.data.success && r.data.registered != false) {
                         otpTtlSeconds = r.data.otpTtlSeconds ?: 300
                         otpResendSeconds = r.data.resendAfterSeconds ?: 60
+                        startOtpResendCooldown()
                         otpStep = OtpStep.OTP
                     } else {
                         // Nomor tidak terdaftar: tetap di halaman login, jangan lanjut ke OTP
@@ -872,6 +877,7 @@ class AppViewModel : ViewModel() {
                     when {
                         r.code == "TIMEOUT" || r.code == "NETWORK" || gateway -> {
                             otpStep = OtpStep.OTP
+                            startOtpResendCooldown()
                             alert = AppAlert(
                                 AlertType.WARNING,
                                 when {
@@ -883,8 +889,16 @@ class AppViewModel : ViewModel() {
                             )
                         }
                         r.code == "OTP_RATE_LIMITED" -> {
+                            val wait = (r.retryAfterSeconds ?: otpResendSeconds).coerceAtLeast(1)
+                            otpResendSeconds = wait
+                            startOtpResendCooldown()
                             otpStep = OtpStep.OTP
-                            alert = errToAlert(r)
+                            alert = AppAlert(
+                                AlertType.WARNING,
+                                "Tunggu Sebentar",
+                                "OTP baru belum bisa dikirim. Cek WhatsApp — kode sebelumnya mungkin sudah terkirim. " +
+                                    "Jika belum ada, tunggu $wait detik lalu ketuk Kirim Ulang.",
+                            )
                         }
                         else -> alert = errToAlert(r)
                     }
@@ -945,6 +959,8 @@ class AppViewModel : ViewModel() {
     fun resetAuth() {
         otpStep = OtpStep.PHONE
         alert = null
+        otpResendJob?.cancel()
+        otpResendRemaining = 0
     }
 
     /** Lanjut ke form OTP bila kode sudah diterima di WhatsApp (mis. setelah error 502). */
@@ -955,6 +971,19 @@ class AppViewModel : ViewModel() {
         }
         alert = null
         otpStep = OtpStep.OTP
+    }
+
+    private fun startOtpResendCooldown(seconds: Int = otpResendSeconds) {
+        otpResendJob?.cancel()
+        val total = seconds.coerceAtLeast(0)
+        otpResendRemaining = total
+        if (total <= 0) return
+        otpResendJob = viewModelScope.launch {
+            while (otpResendRemaining > 0) {
+                kotlinx.coroutines.delay(1_000)
+                otpResendRemaining -= 1
+            }
+        }
     }
 
     fun logout(onDone: () -> Unit) {

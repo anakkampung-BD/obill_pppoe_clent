@@ -23,17 +23,10 @@ class CustomerRepository(
 
     val isLoggedIn: Boolean get() = tokenStore.isLoggedIn
 
-    suspend fun requestOtp(phone: String): ApiResult<RequestOtpResp> {
-        // Gateway 502/503/504 sering muncul saat server lambat kirim WhatsApp — coba ulang.
-        var last: ApiResult<RequestOtpResp> = safe { api.requestOtp(RequestOtpReq(phone)) }
-        repeat(2) { attempt ->
-            val err = last as? ApiResult.Err ?: return last
-            if (err.httpCode !in GATEWAY_HTTP) return last
-            kotlinx.coroutines.delay(1_500L * (attempt + 1))
-            last = safe { api.requestOtp(RequestOtpReq(phone)) }
-        }
-        return last
-    }
+    suspend fun requestOtp(phone: String): ApiResult<RequestOtpResp> =
+        // Jangan retry request_otp saat 502: server sering sudah kirim WA,
+        // retry berulang memicu OTP_RATE_LIMITED tanpa OTP baru.
+        safe { api.requestOtp(RequestOtpReq(phone)) }
 
     suspend fun verifyOtp(phone: String, otp: String): ApiResult<VerifyOtpResp> {
         var last: ApiResult<VerifyOtpResp> = safe { api.verifyOtp(VerifyOtpReq(phone, otp)) }
