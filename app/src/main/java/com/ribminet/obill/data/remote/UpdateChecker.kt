@@ -12,12 +12,23 @@ import java.util.concurrent.TimeUnit
 data class ReleaseInfo(
     val versionName: String,
     val notes: String,
+    /** URL unduhan langsung (…/releases/download/…/xxx.apk). */
     val downloadUrl: String,
+    /**
+     * URL Assets API GitHub (…/releases/assets/{id}) untuk unduhan repo privat
+     * dengan header Accept: application/octet-stream.
+     */
+    val apiAssetUrl: String = "",
     val pageUrl: String,
-)
+) {
+    /** True bila ada URL yang bisa dipakai unduh APK in-app. */
+    val hasApkDownload: Boolean
+        get() = isApkUrl(downloadUrl) || apiAssetUrl.isNotBlank()
+}
 
 private data class GithubAssetDto(
     val name: String? = null,
+    val url: String? = null,
     @SerializedName("browser_download_url") val browserDownloadUrl: String? = null,
     @SerializedName("content_type") val contentType: String? = null,
 )
@@ -79,6 +90,7 @@ object UpdateChecker {
         }
     }
 
+    /** Auth hanya untuk api.github.com bila token diisi (repo privat). */
     fun applyAuth(builder: Request.Builder) {
         if (UpdateConfig.ACCESS_TOKEN.isNotBlank()) {
             builder.header("Authorization", "Bearer ${UpdateConfig.ACCESS_TOKEN}")
@@ -92,17 +104,31 @@ object UpdateChecker {
         val apkAsset = assets.firstOrNull { asset ->
             asset.name?.endsWith(".apk", ignoreCase = true) == true ||
                 asset.contentType?.contains("android.package", ignoreCase = true) == true ||
-                asset.browserDownloadUrl?.contains(".apk", ignoreCase = true) == true
+                isApkUrl(asset.browserDownloadUrl)
         }
-        val apkUrl = apkAsset?.browserDownloadUrl
+        val browserUrl = apkAsset?.browserDownloadUrl.orEmpty()
+        val apiUrl = apkAsset?.url.orEmpty()
         val page = htmlUrl?.takeIf { it.isNotBlank() } ?: UpdateConfig.releasesPage
+        // Jangan jatuhkan ke halaman HTML sebagai "downloadUrl" — itu memicu buka browser.
+        val download = when {
+            isApkUrl(browserUrl) -> browserUrl
+            else -> ""
+        }
+        if (download.isBlank() && apiUrl.isBlank()) return null
         return ReleaseInfo(
             versionName = version,
             notes = body?.trim().orEmpty(),
-            downloadUrl = apkUrl ?: page,
+            downloadUrl = download,
+            apiAssetUrl = apiUrl,
             pageUrl = page,
         )
     }
+}
+
+internal fun isApkUrl(url: String?): Boolean {
+    if (url.isNullOrBlank()) return false
+    val path = url.substringBefore('?').substringBefore('#')
+    return path.endsWith(".apk", ignoreCase = true)
 }
 
 /** Perbandingan versi semantik sederhana (mis. "3.0.1" > "3.0.0"). */

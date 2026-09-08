@@ -123,21 +123,24 @@ class AppViewModel : ViewModel() {
     }
 
     /**
-     * Unduh APK rilis terbaru lalu picu installer.
-     * Bila APK tidak tersedia/gagal, [onFallback] dipanggil dengan URL halaman rilis.
+     * Unduh APK rilis terbaru lalu picu installer in-app.
+     * Tidak membuka browser; bila gagal tampilkan error agar user bisa coba lagi.
      */
-    fun downloadAndInstallUpdate(onFallback: (String) -> Unit) {
+    fun downloadAndInstallUpdate(onFallback: (String) -> Unit = {}) {
         val info = updateInfo ?: return
         if (updateDownloading) return
-        val url = info.downloadUrl
-        if (url.isBlank() || !url.endsWith(".apk", ignoreCase = true)) {
-            onFallback(info.pageUrl.ifBlank { url })
+        if (!info.hasApkDownload) {
+            alert = AppAlert(
+                AlertType.ERROR,
+                "Pembaruan Belum Siap",
+                "File APK rilis belum tersedia. Coba lagi nanti."
+            )
             return
         }
         updateDownloading = true
         updateProgress = 0f
         viewModelScope.launch {
-            val file = ApkUpdater.download(ObillApp.instance, url) { p ->
+            val file = ApkUpdater.download(ObillApp.instance, info) { p ->
                 updateProgress = if (p < 0f) updateProgress else p
             }
             updateDownloading = false
@@ -148,9 +151,10 @@ class AppViewModel : ViewModel() {
                 alert = AppAlert(
                     AlertType.ERROR,
                     "Unduhan Gagal",
-                    "Tidak dapat mengunduh pembaruan. Anda akan diarahkan ke halaman rilis."
+                    "Tidak dapat mengunduh pembaruan. Periksa koneksi internet lalu coba lagi."
                 )
-                onFallback(info.pageUrl.ifBlank { url })
+                // Jangan buka browser GitHub — user minta update in-app saja.
+                onFallback("")
             }
         }
     }

@@ -1,7 +1,6 @@
 package com.ribminet.obill
 
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -118,13 +117,8 @@ fun App() {
             downloading = vm.updateDownloading,
             progress = vm.updateProgress,
             onUpdate = {
-                vm.downloadAndInstallUpdate { fallbackUrl ->
-                    if (fallbackUrl.isNotBlank()) {
-                        runCatching {
-                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(fallbackUrl)))
-                        }
-                    }
-                }
+                // Update sepenuhnya in-app (unduh APK + installer). Tidak buka browser.
+                vm.downloadAndInstallUpdate()
             },
             onDismiss = { vm.dismissUpdate() },
         )

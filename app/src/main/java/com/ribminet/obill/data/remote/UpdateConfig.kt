@@ -3,24 +3,22 @@ package com.ribminet.obill.data.remote
 /**
  * Konfigurasi auto-deteksi versi rilis terbaru dari GitHub Releases.
  *
- * Repo: https://github.com/anakkampung-BD/obill_pppoe_clent
+ * Repo: https://github.com/anakkampung-BD/obill_pppoe_clent (publik)
  *
- * Pengecekan memakai GitHub Releases API (tanpa token untuk repo publik).
- * APK diunduh dari asset rilis lalu dipasang otomatis.
+ * Pengecekan memakai GitHub Releases API. APK diunduh dari asset rilis lalu
+ * dipasang otomatis (in-app), tanpa membuka halaman browser.
  *
- * [ACCESS_TOKEN] hanya diisi bila repo privat (classic PAT dengan scope `repo` /
- * fine-grained: Contents read).
- *
- * Catatan migrasi: rilis transisi (mis. 3.0.5) boleh tetap diunggah ke repo GitLab
- * lama agar klien 3.0.4 masih bisa mengunduh; binary rilis itu sudah memakai URL
- * GitHub ini untuk pengecekan update selanjutnya.
+ * [ACCESS_TOKEN] biarkan kosong untuk repo publik.
+ * Mengisi token yang sudah dicabut/invalid justru membuat cek update gagal (401).
+ * Isi hanya bila repo privat (classic PAT scope `repo` / fine-grained Contents read).
  */
 object UpdateConfig {
     const val HOST = "https://github.com"
     const val API_HOST = "https://api.github.com"
     /** owner/repo — harus sama dengan path di github.com */
     const val PROJECT_PATH = "anakkampung-BD/obill_pppoe_clent"
-    const val ACCESS_TOKEN = "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"
+    /** Kosong = repo publik. Jangan commit PAT ke repo publik (GitHub akan revoke). */
+    const val ACCESS_TOKEN = ""
 
     val isConfigured: Boolean get() = PROJECT_PATH.isNotBlank()
 
@@ -32,7 +30,7 @@ object UpdateConfig {
     val releasesApi: String
         get() = "$API_HOST/repos/$PROJECT_PATH/releases"
 
-    /** Halaman rilis (fallback bila APK tidak ditemukan pada aset). */
+    /** Halaman rilis (hanya untuk teks bantuan, bukan unduhan in-app). */
     val releasesPage: String
         get() = "$HOST/$PROJECT_PATH/releases"
 }
