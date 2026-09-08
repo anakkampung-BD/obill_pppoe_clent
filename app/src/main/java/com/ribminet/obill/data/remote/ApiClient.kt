@@ -15,15 +15,18 @@ object ApiClient {
         }
 
         val client = OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            // request_otp menunggu pengiriman WhatsApp di server — sering >30 detik.
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
+            .callTimeout(120, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 val original = chain.request()
                 val builder = original.newBuilder()
                     .header("Accept", "application/json")
-                // Jangan timpa Content-Type multipart (upload foto pengaduan, dll.)
+                // Jangan timpa Content-Type yang sudah di-set Retrofit/multipart.
                 val body = original.body
-                if (body == null || body !is MultipartBody) {
+                if (body != null && body !is MultipartBody && original.header("Content-Type") == null) {
                     builder.header("Content-Type", "application/json")
                 }
                 if (ApiConfig.APP_KEY.isNotBlank()) {

@@ -8,6 +8,8 @@ import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import retrofit2.HttpException
 import java.io.IOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 class CustomerRepository(
     private val api: CustomerApi,
@@ -324,8 +326,21 @@ class CustomerRepository(
                 retryAfterSeconds = err?.retryAfterSeconds,
                 remainingAttempts = err?.remainingAttempts,
             )
+        } catch (e: SocketTimeoutException) {
+            ApiResult.Err(
+                message = "Server merespons terlalu lama. Jika kode OTP sudah masuk WhatsApp, lanjutkan verifikasi.",
+                code = "TIMEOUT",
+            )
+        } catch (e: UnknownHostException) {
+            ApiResult.Err(
+                message = "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.",
+                code = "NETWORK",
+            )
         } catch (e: IOException) {
-            ApiResult.Err(message = "Tidak dapat terhubung ke server. Periksa koneksi internet Anda.", code = "NETWORK")
+            ApiResult.Err(
+                message = "Koneksi terputus saat menghubungi server. Coba lagi.",
+                code = "NETWORK",
+            )
         } catch (e: Exception) {
             ApiResult.Err(message = e.message ?: "Terjadi kesalahan tak terduga.", code = "UNKNOWN")
         }

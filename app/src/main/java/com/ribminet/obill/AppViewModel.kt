@@ -865,7 +865,24 @@ class AppViewModel : ViewModel() {
                         )
                     }
                 }
-                is ApiResult.Err -> alert = errToAlert(r)
+                is ApiResult.Err -> {
+                    // Server sering kirim WA dulu, baru balas HTTP. Timeout/rate-limit ≠ gagal kirim OTP.
+                    when (r.code) {
+                        "TIMEOUT", "NETWORK" -> {
+                            otpStep = OtpStep.OTP
+                            alert = AppAlert(
+                                AlertType.WARNING,
+                                if (r.code == "TIMEOUT") "Koneksi Lambat" else "Koneksi Terputus",
+                                "Jika kode OTP sudah masuk WhatsApp, masukkan di sini. Jika belum, ketuk Kirim Ulang.",
+                            )
+                        }
+                        "OTP_RATE_LIMITED" -> {
+                            otpStep = OtpStep.OTP
+                            alert = errToAlert(r)
+                        }
+                        else -> alert = errToAlert(r)
+                    }
+                }
             }
             authLoading = false
         }
@@ -905,6 +922,7 @@ class AppViewModel : ViewModel() {
             "OTP_LOCKED" -> "OTP Terkunci"
             "INVALID_PHONE" -> "Nomor Tidak Valid"
             "NETWORK" -> "Koneksi Bermasalah"
+            "TIMEOUT" -> "Koneksi Lambat"
             else -> "Gagal"
         }
         var msg = e.message
